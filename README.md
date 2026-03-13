@@ -4,6 +4,53 @@ Ergonomic veneer over [vtk.js](https://github.com/Kitware/vtk-js). Property-styl
 
 Every object returned is a real vtk.js instance. Drop down to the raw API any time.
 
+## Before and after
+
+OutlineFilter example — raw vtk.js vs vtk-easy.
+
+**Before** (raw vtk.js):
+
+```js
+const fullScreenRenderer = vtkFullScreenRenderWindow.newInstance({ background: [0, 0, 0] });
+const renderer = fullScreenRenderer.getRenderer();
+const renderWindow = fullScreenRenderer.getRenderWindow();
+
+const pointSource = vtkPointSource.newInstance({ numberOfPoints: 25, radius: 0.25 });
+const outline = vtkOutlineFilter.newInstance();
+outline.setInputConnection(pointSource.getOutputPort());
+
+const pointMapper = vtkMapper.newInstance();
+pointMapper.setInputConnection(pointSource.getOutputPort());
+const pointActor = vtkActor.newInstance();
+pointActor.setMapper(pointMapper);
+pointActor.getProperty().setPointSize(5);
+renderer.addActor(pointActor);
+
+const outlineMapper = vtkMapper.newInstance();
+outlineMapper.setInputConnection(outline.getOutputPort());
+const outlineActor = vtkActor.newInstance();
+outlineActor.setMapper(outlineMapper);
+outlineActor.getProperty().setLineWidth(5);
+renderer.addActor(outlineActor);
+
+renderer.resetCamera();
+renderWindow.render();
+```
+
+**After** (vtk-easy):
+
+```js
+const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] });
+const pointSource = ez.create(vtkPointSource, { numberOfPoints: 25, radius: 0.25 });
+
+const pointsActor = ez.pipeline(pointSource).actor({ property: { pointSize: 5 } });
+const outlineActor = ez.pipeline(pointSource).filter(vtkOutlineFilter).actor({ property: { lineWidth: 5 } });
+view.add(pointsActor, outlineActor);
+
+view.renderer.resetCamera();
+view.renderWindow.render();
+```
+
 ## Install
 
 ```bash
@@ -81,10 +128,17 @@ Arguments passed to methods through a wrapped proxy are auto-unwrapped, so you c
 view.renderer.addViewProp(wrappedActor);  // auto-unwraps the actor
 ```
 
-Use `ez.unwrap()` to get the raw vtk.js instance for corner cases:
+Auto-unwrap only works when calling methods through a wrapped proxy. If you're calling a method on a raw vtk.js object, either wrap it first:
 
 ```js
-const raw = ez.unwrap(wrappedCone);
+const materials = ez.wrap(materialsReader);
+materials.applyMaterialToActor(name, actor);  // auto-unwraps actor
+```
+
+Or use `ez.unwrap()` to get the raw instance:
+
+```js
+materialsReader.applyMaterialToActor(name, ez.unwrap(actor));
 ```
 
 ### `ez.pipeline(input, props?)`
@@ -188,56 +242,9 @@ Apply a plain object of properties to a vtk.js instance using setXxx conventions
 ez.applyProps(actor.getProperty(), { color: [1, 0, 0], opacity: 0.5 });
 ```
 
-## Before and after
-
-OutlineFilter example — raw vtk.js vs vtk-easy.
-
-**Before** (raw vtk.js):
-
-```js
-const fullScreenRenderer = vtkFullScreenRenderWindow.newInstance({ background: [0, 0, 0] });
-const renderer = fullScreenRenderer.getRenderer();
-const renderWindow = fullScreenRenderer.getRenderWindow();
-
-const pointSource = vtkPointSource.newInstance({ numberOfPoints: 25, radius: 0.25 });
-const outline = vtkOutlineFilter.newInstance();
-outline.setInputConnection(pointSource.getOutputPort());
-
-const pointMapper = vtkMapper.newInstance();
-pointMapper.setInputConnection(pointSource.getOutputPort());
-const pointActor = vtkActor.newInstance();
-pointActor.setMapper(pointMapper);
-pointActor.getProperty().setPointSize(5);
-renderer.addActor(pointActor);
-
-const outlineMapper = vtkMapper.newInstance();
-outlineMapper.setInputConnection(outline.getOutputPort());
-const outlineActor = vtkActor.newInstance();
-outlineActor.setMapper(outlineMapper);
-outlineActor.getProperty().setLineWidth(5);
-renderer.addActor(outlineActor);
-
-renderer.resetCamera();
-renderWindow.render();
-```
-
-**After** (vtk-easy):
-
-```js
-const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] });
-const pointSource = ez.create(vtkPointSource, { numberOfPoints: 25, radius: 0.25 });
-
-const pointsActor = ez.pipeline(pointSource).actor({ property: { pointSize: 5 } });
-const outlineActor = ez.pipeline(pointSource).filter(vtkOutlineFilter).actor({ property: { lineWidth: 5 } });
-view.add(pointsActor, outlineActor);
-
-view.renderer.resetCamera();
-view.renderWindow.render();
-```
-
 ## Design principles
 
-- **Thin veneer, not a framework.** No hidden state beyond `defaults()`. No vtk.js monkey-patching.
+- **Thin veneer, not a framework.** The proxy adds minimal convenience methods (like `view.add()`) but never modifies vtk.js objects themselves.
 - **Everything is a real vtk.js object.** Wrapped objects are Proxies over the actual instances. Call any raw vtk.js method at any time.
 - **Explicit over magical.** You pass the vtk classes you use. No auto-import, no string-based lookups, no class registration. Camera reset and rendering are never hidden.
 - **Composable.** Branching pipelines, multi-port inputs, and mixed raw/wrapped code all work naturally.
