@@ -1,0 +1,40 @@
+{
+  "name": "vtk-easy",
+  "version": "0.1.0",
+  "description": "Ergonomic veneer over vtk.js — property-style access, declarative pipelines, viewer boilerplate reduction",
+  "type": "module",
+  "main": "./index.js",
+  "module": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "types": "./index.d.ts"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "test": "node index.test.js"
+  },
+  "peerDependencies": {
+    "@kitware/vtk.js": ">=30.0.0"
+  },
+  "devDependencies": {
+    "@kitware/vtk.js": "^35.3.2",
+    "lil-gui": "^0.20.0",
+    "vite": "^6.0.0"
+  },
+  "keywords": [
+    "vtk",
+    "vtk.js",
+    "3d",
+    "visualization",
+    "webgl",
+    "pipeline"
+  ],
+  "license": "BSD-3-Clause"
+}
