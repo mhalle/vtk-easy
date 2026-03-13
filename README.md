@@ -1,6 +1,6 @@
 # vtk-easy
 
-Ergonomic veneer over [vtk.js](https://github.com/nicegist/vtk-js). Property-style access, fluent pipelines, and auto-unwrapping — without touching vtk.js internals.
+Ergonomic veneer over [vtk.js](https://github.com/Kitware/vtk-js). Property-style access, fluent pipelines, and auto-unwrapping — without touching vtk.js internals.
 
 Every object returned is a real vtk.js instance. Drop down to the raw API any time.
 
