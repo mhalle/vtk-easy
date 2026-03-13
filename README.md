@@ -240,4 +240,4 @@ view.renderWindow.render();
 
 ## License
 
-BSD-3-Clause
+Apache-2.0

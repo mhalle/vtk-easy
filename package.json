@@ -36,5 +36,9 @@
     "webgl",
     "pipeline"
   ],
-  "license": "BSD-3-Clause"
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mhalle/vtk-easy.git"
+  }
 }
