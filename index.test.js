@@ -385,6 +385,237 @@ console.log('--- proxy property access for getOutputPort ---');
 }
 
 // ---------------------------------------------------------------------------
+// defineFilter / defineSource (uses real vtk.js macros)
+// ---------------------------------------------------------------------------
+
+import { defineFilter, defineSource, prop } from './index.js';
+
+console.log('--- defineFilter: basic ---');
+{
+  const vtkDoubleFilter = defineFilter({
+    name: 'vtkDoubleFilter',
+    props: {
+      factor: 2.0,
+    },
+    requestData(publicAPI, model, inData, outData) {
+      outData[0] = { value: inData[0].value * model.factor };
+    },
+  });
+
+  assert(typeof vtkDoubleFilter.newInstance === 'function', 'defineFilter returns newInstance');
+  assert(typeof vtkDoubleFilter.extend === 'function', 'defineFilter returns extend');
+
+  const f = vtkDoubleFilter.newInstance({ factor: 3.0 });
+  assert(f.isA('vtkDoubleFilter'), 'isA works');
+  assert(f.isA('vtkObject'), 'isA vtkObject works');
+  assert(f.getFactor() === 3.0, 'getter works with initial value');
+  f.setFactor(5.0);
+  assert(f.getFactor() === 5.0, 'setter works');
+  assert(typeof f.getOutputPort === 'function', 'algo getOutputPort exists');
+  assert(typeof f.setInputData === 'function', 'algo setInputData exists');
+  assert(typeof f.setInputConnection === 'function', 'algo setInputConnection exists');
+}
+
+console.log('--- defineFilter: array props ---');
+{
+  const vtkOffsetFilter = defineFilter({
+    name: 'vtkOffsetFilter',
+    props: {
+      offset: [0, 0, 0],
+      scale: 1.0,
+    },
+    requestData(publicAPI, model, inData, outData) {
+      outData[0] = model.offset.map((v) => v * model.scale);
+    },
+  });
+
+  const f = vtkOffsetFilter.newInstance();
+  assert(JSON.stringify(f.getOffset()) === '[0,0,0]', 'array getter returns default');
+  f.setOffset([1, 2, 3]);
+  assert(JSON.stringify(f.getOffset()) === '[1,2,3]', 'array setter works');
+  assert(f.getScale() === 1.0, 'scalar prop coexists with array prop');
+}
+
+console.log('--- defineFilter: custom methods ---');
+{
+  const vtkCustomFilter = defineFilter({
+    name: 'vtkCustomFilter',
+    props: { count: 0 },
+    methods: {
+      increment(publicAPI, model) {
+        model.count++;
+        publicAPI.modified();
+      },
+    },
+    requestData(publicAPI, model, inData, outData) {
+      outData[0] = inData[0];
+    },
+  });
+
+  const f = vtkCustomFilter.newInstance();
+  assert(f.getCount() === 0, 'initial count');
+  f.increment();
+  assert(f.getCount() === 1, 'custom method works');
+}
+
+console.log('--- defineSource ---');
+{
+  const vtkConstantSource = defineSource({
+    name: 'vtkConstantSource',
+    props: {
+      value: 42,
+    },
+    requestData(publicAPI, model, inData, outData) {
+      outData[0] = { value: model.value };
+    },
+  });
+
+  const s = vtkConstantSource.newInstance();
+  assert(s.isA('vtkConstantSource'), 'source isA works');
+  assert(s.getValue() === 42, 'source getter works');
+  assert(typeof s.getOutputPort === 'function', 'source has getOutputPort');
+  // source has 0 inputs
+  assert(s.getNumberOfInputPorts() === 0, 'source has 0 input ports');
+}
+
+console.log('--- defineFilter: default props not shared between instances ---');
+{
+  const vtkArrFilter = defineFilter({
+    name: 'vtkArrFilter',
+    props: { center: [0, 0, 0] },
+    requestData() {},
+  });
+
+  const a = vtkArrFilter.newInstance();
+  const b = vtkArrFilter.newInstance();
+  a.setCenter([1, 2, 3]);
+  assert(JSON.stringify(b.getCenter()) === '[0,0,0]', 'instances have independent defaults');
+}
+
+console.log('--- prop: min/max clamping ---');
+{
+  const vtkClampFilter = defineFilter({
+    name: 'vtkClampFilter',
+    props: {
+      factor: prop(0.5, { min: 0, max: 1 }),
+    },
+    requestData() {},
+  });
+
+  const f = vtkClampFilter.newInstance();
+  assert(f.getFactor() === 0.5, 'prop default works');
+  f.setFactor(2.0);
+  assert(f.getFactor() === 1.0, 'prop max clamps');
+  f.setFactor(-0.5);
+  assert(f.getFactor() === 0.0, 'prop min clamps');
+  f.setFactor(0.7);
+  assert(f.getFactor() === 0.7, 'prop accepts valid value');
+}
+
+console.log('--- prop: validate transform ---');
+{
+  const vtkRoundFilter = defineFilter({
+    name: 'vtkRoundFilter',
+    props: {
+      count: prop(10, { validate: v => Math.floor(Math.abs(v)) }),
+    },
+    requestData() {},
+  });
+
+  const f = vtkRoundFilter.newInstance();
+  f.setCount(3.7);
+  assert(f.getCount() === 3, 'validate rounds down');
+  f.setCount(-5.2);
+  assert(f.getCount() === 5, 'validate takes abs then floors');
+}
+
+console.log('--- prop: validate throws ---');
+{
+  const vtkStrictFilter = defineFilter({
+    name: 'vtkStrictFilter',
+    props: {
+      mode: prop('linear', {
+        validate: v => {
+          if (!['linear', 'cubic'].includes(v)) throw new Error(`invalid mode: ${v}`);
+          return v;
+        },
+      }),
+    },
+    requestData() {},
+  });
+
+  const f = vtkStrictFilter.newInstance();
+  f.setMode('cubic');
+  assert(f.getMode() === 'cubic', 'validate accepts valid value');
+
+  let threw = false;
+  try { f.setMode('quadratic'); } catch (e) { threw = true; }
+  assert(threw, 'validate throws on invalid value');
+  assert(f.getMode() === 'cubic', 'value unchanged after throw');
+}
+
+console.log('--- prop: min/max + validate combined ---');
+{
+  const vtkComboFilter = defineFilter({
+    name: 'vtkComboFilter',
+    props: {
+      step: prop(1, { min: 0, max: 100, validate: v => Math.round(v) }),
+    },
+    requestData() {},
+  });
+
+  const f = vtkComboFilter.newInstance();
+  f.setStep(3.7);
+  assert(f.getStep() === 4, 'clamp then round');
+  f.setStep(150.2);
+  assert(f.getStep() === 100, 'clamp to max then round');
+  f.setStep(-5);
+  assert(f.getStep() === 0, 'clamp to min');
+}
+
+console.log('--- prop: mixed with plain props ---');
+{
+  const vtkMixedFilter = defineFilter({
+    name: 'vtkMixedFilter',
+    props: {
+      name: 'default',
+      factor: prop(0.5, { min: 0 }),
+      center: [0, 0, 0],
+    },
+    requestData() {},
+  });
+
+  const f = vtkMixedFilter.newInstance();
+  assert(f.getName() === 'default', 'plain scalar prop works');
+  assert(JSON.stringify(f.getCenter()) === '[0,0,0]', 'plain array prop works');
+  f.setFactor(-1);
+  assert(f.getFactor() === 0, 'validated prop clamps');
+  f.setName('test');
+  assert(f.getName() === 'test', 'plain prop still unconstrained');
+}
+
+console.log('--- schema: metadata accessible ---');
+{
+  const vtkDocFilter = defineFilter({
+    name: 'vtkDocFilter',
+    props: {
+      factor: prop(0.5, { min: 0, max: 1, description: 'Scale factor' }),
+      center: [0, 0, 0],
+      mode: prop('linear', { description: 'Interpolation mode' }),
+    },
+    requestData() {},
+  });
+
+  assert(vtkDocFilter.schema.factor.default === 0.5, 'schema has default');
+  assert(vtkDocFilter.schema.factor.min === 0, 'schema has min');
+  assert(vtkDocFilter.schema.factor.max === 1, 'schema has max');
+  assert(vtkDocFilter.schema.factor.description === 'Scale factor', 'schema has description');
+  assert(JSON.stringify(vtkDocFilter.schema.center.default) === '[0,0,0]', 'plain prop in schema');
+  assert(vtkDocFilter.schema.center.description === undefined, 'no description for plain prop');
+  assert(vtkDocFilter.schema.mode.description === 'Interpolation mode', 'string prop description');
+}
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);

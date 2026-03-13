@@ -245,6 +245,113 @@ Apply a plain object of properties to a vtk.js instance using setXxx conventions
 ez.applyProps(actor.getProperty(), { color: [1, 0, 0], opacity: 0.5 });
 ```
 
+### `ez.defineFilter(spec)` / `ez.defineSource(spec)`
+
+Create a vtk.js filter or source without the boilerplate. The result is a standard vtk.js module with `newInstance` and `extend` — it plugs into pipelines, has `getXxx`/`setXxx` methods, and passes `isA()` checks.
+
+**Simple filter:**
+
+```js
+const vtkJitterFilter = ez.defineFilter({
+  name: 'vtkJitterFilter',
+  props: {
+    amplitude: 0.1,
+    seed: 42,
+  },
+  requestData(publicAPI, model, inData, outData) {
+    const input = inData[0];
+    const inPts = input.getPoints().getData();
+    const outPts = new Float32Array(inPts.length);
+    // ... jitter each point by model.amplitude ...
+    const output = vtkPolyData.newInstance();
+    output.shallowCopy(input);
+    output.getPoints().setData(outPts, 3);
+    outData[0] = output;
+  },
+});
+
+// Use in a pipeline like any vtk.js filter
+const actor = ez.pipeline(sphere)
+  .filter(vtkJitterFilter, { amplitude: 0.2 })
+  .actor();
+```
+
+**Simple source:**
+
+```js
+const vtkGridSource = ez.defineSource({
+  name: 'vtkGridSource',
+  props: {
+    size: 10,
+    spacing: 1.0,
+  },
+  requestData(publicAPI, model, inData, outData) {
+    // ... generate grid points ...
+    outData[0] = polyData;
+  },
+});
+```
+
+Sources have zero input ports by default; filters have one input and one output.
+
+**Props with validation** — use `ez.prop()` to add constraints:
+
+```js
+props: {
+  factor: ez.prop(0.5, { min: 0, max: 1, description: 'Scale factor' }),
+  seed: ez.prop(42, { validate: v => Math.floor(Math.abs(v)) }),
+  center: [0, 0, 0],   // plain array — no constraints
+  name: 'default',      // plain scalar — no constraints
+}
+```
+
+- `min`/`max` — auto-clamps the value
+- `validate` — transform, coerce, or throw on bad input
+- `description` — metadata for GUIs or documentation
+- Plain values (no `ez.prop()`) work as before with no validation
+
+The `validate` function receives the (already clamped) value and returns the corrected value. Throw to reject:
+
+```js
+mode: ez.prop('linear', {
+  validate: v => {
+    if (!['linear', 'cubic'].includes(v)) throw new Error(`invalid mode: ${v}`);
+    return v;
+  },
+  description: 'Interpolation mode',
+}),
+```
+
+**Schema introspection** — every defined module exposes its prop metadata:
+
+```js
+vtkJitterFilter.schema
+// { amplitude: { default: 0.1 }, seed: { default: 42 } }
+
+vtkMyFilter.schema.factor
+// { default: 0.5, min: 0, max: 1, description: 'Scale factor' }
+```
+
+**Custom methods:**
+
+```js
+const vtkAccumulator = ez.defineFilter({
+  name: 'vtkAccumulator',
+  props: { count: 0 },
+  methods: {
+    increment(publicAPI, model) { model.count++; publicAPI.modified(); },
+    reset(publicAPI, model) { model.count = 0; publicAPI.modified(); },
+  },
+  requestData(publicAPI, model, inData, outData) { ... },
+});
+
+const f = vtkAccumulator.newInstance();
+f.increment();
+f.reset();
+```
+
+`defineFilter` is best for simple to medium filters where the boilerplate dominates. For complex filters with many interrelated methods (like vtkCalculator), the raw vtk.js pattern may still be clearer.
+
 ## Design principles
 
 - **Thin veneer, not a framework.** The proxy adds minimal convenience methods (like `view.add()`) but never modifies vtk.js objects themselves.

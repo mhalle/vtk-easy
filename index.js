@@ -14,6 +14,7 @@
 
 import vtkActor from '@kitware/vtk.js/Rendering/Core/Actor.js';
 import vtkMapper from '@kitware/vtk.js/Rendering/Core/Mapper.js';
+import macro from '@kitware/vtk.js/macros.js';
 
 // ---------------------------------------------------------------------------
 // defaults — override the built-in Mapper/Actor if needed
@@ -300,8 +301,136 @@ function applyProps(target, props) {
 }
 
 // ---------------------------------------------------------------------------
+// prop — tagged property descriptor for defineFilter/defineSource
+// ---------------------------------------------------------------------------
+//
+//   ez.prop(0.5, { min: 0, max: 1, description: 'Scale factor' })
+//   ez.prop(42, { validate: v => Math.floor(v) })
+
+const PROP_TAG = Symbol('vtkEasyProp');
+
+function prop(defaultValue, options = {}) {
+  return { [PROP_TAG]: true, default: defaultValue, ...options };
+}
+
+// ---------------------------------------------------------------------------
+// defineFilter / defineSource — declarative vtk.js module creation
+// ---------------------------------------------------------------------------
+//
+// Generates a standard vtk.js module ({ newInstance, extend }) from a
+// simple declaration.  The result plugs into pipelines, has proper
+// getXxx/setXxx methods, and passes isA() checks — it IS a vtk.js object.
+//
+//   const vtkMyFilter = ez.defineFilter({
+//     name: 'vtkMyFilter',
+//     props: {
+//       shrinkFactor: ez.prop(0.5, { min: 0, max: 1 }),
+//       center: [0, 0, 0],
+//       seed: 42,
+//     },
+//     requestData(publicAPI, model, inData, outData) { ... },
+//   });
+//
+//   const f = vtkMyFilter.newInstance({ shrinkFactor: 0.8 });
+
+function defineModule(spec, numInputs, numOutputs) {
+  const { name, props = {}, requestData, methods } = spec;
+  if (!name) throw new Error('defineFilter/defineSource requires a name');
+
+  // Parse props: separate scalar vs array, extract defaults and validators
+  const scalarFields = [];
+  const arrayFields = {};  // field → size
+  const defaultValues = {};
+  const validators = {};   // field → validate function
+
+  const schema = {};  // field → { default, min, max, description, ... }
+
+  for (const [key, raw] of Object.entries(props)) {
+    const isPropDescriptor = raw && raw[PROP_TAG];
+    const value = isPropDescriptor ? raw.default : raw;
+    defaultValues[key] = value;
+
+    if (Array.isArray(value)) {
+      arrayFields[key] = value.length;
+    } else {
+      scalarFields.push(key);
+    }
+
+    // Build schema entry
+    const entry = { default: value };
+    if (isPropDescriptor) {
+      const { min, max, description, validate } = raw;
+      if (min != null) entry.min = min;
+      if (max != null) entry.max = max;
+      if (description) entry.description = description;
+
+      if (validate || min != null || max != null) {
+        validators[key] = (v) => {
+          let result = v;
+          if (min != null && result < min) result = min;
+          if (max != null && result > max) result = max;
+          if (validate) result = validate(result);
+          return result;
+        };
+      }
+    }
+    schema[key] = entry;
+  }
+
+  function impl(publicAPI, model) {
+    model.classHierarchy.push(name);
+
+    if (requestData) {
+      publicAPI.requestData = (inData, outData) =>
+        requestData(publicAPI, model, inData, outData);
+    }
+
+    // Override setters for validated props
+    for (const [field, validate] of Object.entries(validators)) {
+      const cap = capitalize(field);
+      const original = publicAPI[`set${cap}`];
+      publicAPI[`set${cap}`] = (value) => original(validate(value));
+    }
+
+    // Attach any extra methods
+    if (methods) {
+      for (const [methodName, fn] of Object.entries(methods)) {
+        publicAPI[methodName] = (...args) => fn(publicAPI, model, ...args);
+      }
+    }
+  }
+
+  function extend(publicAPI, model, initialValues = {}) {
+    Object.assign(model, structuredClone(defaultValues), initialValues);
+    macro.obj(publicAPI, model);
+    macro.algo(publicAPI, model, numInputs, numOutputs);
+    if (scalarFields.length > 0) {
+      macro.setGet(publicAPI, model, scalarFields);
+    }
+    for (const [field, size] of Object.entries(arrayFields)) {
+      macro.setGetArray(publicAPI, model, [field], size);
+    }
+    impl(publicAPI, model);
+  }
+
+  const newInstance = macro.newInstance(extend, name);
+
+  return { newInstance, extend, schema };
+}
+
+function defineFilter(spec) {
+  const { inputs = 1, outputs = 1 } = spec;
+  return defineModule(spec, inputs, outputs);
+}
+
+function defineSource(spec) {
+  const { outputs = 1 } = spec;
+  return defineModule(spec, 0, outputs);
+}
+
+// ---------------------------------------------------------------------------
 // exports
 // ---------------------------------------------------------------------------
 
-export { defaults, wrap, unwrap, create, pipeline, applyProps, wireChain, isVtkObject };
-export default { defaults, wrap, unwrap, create, pipeline, applyProps, wireChain, isVtkObject };
+export { defaults, wrap, unwrap, create, pipeline, applyProps, wireChain, isVtkObject, defineFilter, defineSource, prop };
+export default { defaults, wrap, unwrap, create, pipeline, applyProps, wireChain, isVtkObject, defineFilter, defineSource, prop };
