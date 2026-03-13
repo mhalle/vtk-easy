@@ -43,8 +43,11 @@ renderWindow.render();
 const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] });
 const pointSource = ez.create(vtkPointSource, { numberOfPoints: 25, radius: 0.25 });
 
-const pointsActor = ez.pipeline(pointSource).actor({ property: { pointSize: 5 } });
-const outlineActor = ez.pipeline(pointSource).filter(vtkOutlineFilter).actor({ property: { lineWidth: 5 } });
+const pointsActor = ez.pipeline(pointSource)
+  .actor({ property: { pointSize: 5 } });
+const outlineActor = ez.pipeline(pointSource)
+  .filter(vtkOutlineFilter)
+  .actor({ property: { lineWidth: 5 } });
 view.add(pointsActor, outlineActor);
 
 view.renderer.resetCamera();
