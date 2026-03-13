@@ -26,7 +26,7 @@ interface VtkClass<T extends VtkObject = VtkObject> {
 }
 
 /** A wrapped vtk.js object with property-style access. */
-type Wrapped<T extends VtkObject = VtkObject> = T & {
+export type Wrapped<T extends VtkObject = VtkObject> = T & {
   /** Access any vtk getter as a property: obj.height → obj.getHeight() */
   [key: string]: any;
 };

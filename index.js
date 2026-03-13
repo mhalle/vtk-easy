@@ -233,7 +233,9 @@ function pipeline(input, props) {
   }
   const raw = unwrap(input);
   if (isVtkObject(raw)) {
-    return new PipelineBuilder(raw, false);
+    // If it has getOutputPort it's an algorithm (source/filter); otherwise it's data
+    const isData = typeof raw.getOutputPort !== 'function';
+    return new PipelineBuilder(raw, isData);
   }
   return new PipelineBuilder(input, true);
 }

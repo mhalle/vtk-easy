@@ -1,6 +1,6 @@
 {
   "name": "vtk-easy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Ergonomic veneer over vtk.js — property-style access, declarative pipelines, viewer boilerplate reduction",
   "type": "module",
   "main": "./index.js",
@@ -10,11 +10,17 @@
     ".": {
       "import": "./index.js",
       "types": "./index.d.ts"
+    },
+    "./polydata": {
+      "import": "./polydata.js",
+      "types": "./polydata.d.ts"
     }
   },
   "files": [
     "index.js",
-    "index.d.ts"
+    "index.d.ts",
+    "polydata.js",
+    "polydata.d.ts"
   ],
   "scripts": {
     "dev": "vite",

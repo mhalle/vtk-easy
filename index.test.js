@@ -389,6 +389,7 @@ console.log('--- proxy property access for getOutputPort ---');
 // ---------------------------------------------------------------------------
 
 import { defineFilter, defineSource, prop } from './index.js';
+import { polyData } from './polydata.js';
 
 console.log('--- defineFilter: basic ---');
 {
@@ -613,6 +614,174 @@ console.log('--- schema: metadata accessible ---');
   assert(JSON.stringify(vtkDocFilter.schema.center.default) === '[0,0,0]', 'plain prop in schema');
   assert(vtkDocFilter.schema.center.description === undefined, 'no description for plain prop');
   assert(vtkDocFilter.schema.mode.description === 'Interpolation mode', 'string prop description');
+}
+
+// ---------------------------------------------------------------------------
+// polyData
+// ---------------------------------------------------------------------------
+
+console.log('--- polyData: flat points, auto-verts ---');
+{
+  const pd = polyData({ points: [0,0,0, 1,0,0, 1,1,0] });
+  const raw = unwrap(pd);
+  assert(raw.isA('vtkPolyData'), 'returns vtkPolyData');
+  const pts = raw.getPoints().getData();
+  assert(pts.length === 9, 'flat points parsed (9 floats)');
+  assert(pts[3] === 1, 'second point x = 1');
+  // auto-verts: 3 points → 3 vert cells
+  const vData = raw.getVerts().getData();
+  assert(vData.length === 6, 'auto-verts: 6 entries (3 cells × [1, idx])');
+  assert(vData[0] === 1 && vData[1] === 0, 'first vert cell');
+  assert(vData[4] === 1 && vData[5] === 2, 'third vert cell');
+}
+
+console.log('--- polyData: nested points ---');
+{
+  const pd = polyData({ points: [[0,0,0], [1,0,0], [1,1,0]] });
+  const pts = unwrap(pd).getPoints().getData();
+  assert(pts.length === 9, 'nested points flattened');
+  assert(pts[6] === 1 && pts[7] === 1 && pts[8] === 0, 'third nested point correct');
+}
+
+console.log('--- polyData: Float32Array points ---');
+{
+  const typed = new Float32Array([0,0,0, 1,0,0]);
+  const pd = polyData({ points: typed });
+  const pts = unwrap(pd).getPoints().getData();
+  assert(pts.length === 6, 'typed array points passed through');
+  assert(pts instanceof Float32Array, 'result is Float32Array');
+}
+
+console.log('--- polyData: flat polys (auto-triangle) ---');
+{
+  const pd = polyData({
+    points: [0,0,0, 1,0,0, 1,1,0],
+    polys: [0, 1, 2],
+  });
+  const raw = unwrap(pd);
+  const pData = raw.getPolys().getData();
+  assert(pData[0] === 3, 'triangle cell size prefix = 3');
+  assert(pData[1] === 0 && pData[2] === 1 && pData[3] === 2, 'triangle indices');
+  // no auto-verts since polys were given
+  const vData = raw.getVerts().getData();
+  assert(vData.length === 0, 'no auto-verts when polys specified');
+}
+
+console.log('--- polyData: nested polys ---');
+{
+  const pd = polyData({
+    points: [0,0,0, 1,0,0, 1,1,0, 0,1,0],
+    polys: [[0,1,2], [0,2,3]],
+  });
+  const pData = unwrap(pd).getPolys().getData();
+  assert(pData.length === 8, '2 triangles: 8 entries');
+  assert(pData[0] === 3 && pData[4] === 3, 'size prefixes correct');
+}
+
+console.log('--- polyData: {size, data} polys ---');
+{
+  const pd = polyData({
+    points: [0,0,0, 1,0,0, 1,1,0, 0,1,0],
+    polys: { size: 4, data: [0, 1, 2, 3] },
+  });
+  const pData = unwrap(pd).getPolys().getData();
+  assert(pData[0] === 4, 'quad cell size = 4');
+  assert(pData.length === 5, '1 quad: 5 entries');
+}
+
+console.log('--- polyData: raw Uint32Array polys (passthrough) ---');
+{
+  const raw = new Uint32Array([3, 0, 1, 2]);
+  const pd = polyData({
+    points: [0,0,0, 1,0,0, 1,1,0],
+    polys: raw,
+  });
+  const pData = unwrap(pd).getPolys().getData();
+  assert(pData.length === 4, 'raw passthrough length');
+  assert(pData[0] === 3, 'raw passthrough data preserved');
+}
+
+console.log('--- polyData: flat lines (auto-pairs) ---');
+{
+  const pd = polyData({
+    points: [0,0,0, 1,0,0, 2,0,0],
+    lines: [0, 1, 1, 2],
+  });
+  const lData = unwrap(pd).getLines().getData();
+  assert(lData.length === 6, '2 line segments: 6 entries');
+  assert(lData[0] === 2, 'line cell size = 2');
+}
+
+console.log('--- polyData: nested lines ---');
+{
+  const pd = polyData({
+    points: [0,0,0, 1,0,0, 2,0,0],
+    lines: [[0, 1], [1, 2]],
+  });
+  const lData = unwrap(pd).getLines().getData();
+  assert(lData.length === 6, 'nested lines: 6 entries');
+}
+
+console.log('--- polyData: point data (1-component) ---');
+{
+  const pd = polyData({
+    points: [0,0,0, 1,0,0, 1,1,0],
+    polys: [0, 1, 2],
+    pointData: { temperature: [20, 25, 30] },
+  });
+  const raw = unwrap(pd);
+  const scalars = raw.getPointData().getScalars();
+  assert(scalars !== null, 'scalars set');
+  assert(scalars.getName() === 'temperature', 'scalar name correct');
+  assert(scalars.getNumberOfComponents() === 1, '1 component');
+  assert(scalars.getData().length === 3, '3 values');
+}
+
+console.log('--- polyData: point data (multi-component) ---');
+{
+  const pd = polyData({
+    points: [0,0,0, 1,0,0, 1,1,0],
+    polys: [0, 1, 2],
+    pointData: { velocity: { data: [1,0,0, 0,1,0, 0,0,1], components: 3 } },
+  });
+  const scalars = unwrap(pd).getPointData().getScalars();
+  assert(scalars.getNumberOfComponents() === 3, '3 components');
+  assert(scalars.getData().length === 9, '9 values for 3 vectors');
+}
+
+console.log('--- polyData: cell data ---');
+{
+  const pd = polyData({
+    points: [0,0,0, 1,0,0, 1,1,0],
+    polys: [0, 1, 2],
+    cellData: { pressure: [101.3] },
+  });
+  const scalars = unwrap(pd).getCellData().getScalars();
+  assert(scalars !== null, 'cell scalars set');
+  assert(scalars.getName() === 'pressure', 'cell scalar name');
+  assert(scalars.getData()[0] === Float32Array.from([101.3])[0], 'cell scalar value');
+}
+
+console.log('--- polyData: return value is wrapped ---');
+{
+  const pd = polyData({ points: [0,0,0, 1,0,0, 1,1,0], polys: [0,1,2] });
+  // wrapped means property-style access works
+  assert(typeof pd.isA === 'function', 'has isA method');
+  assert(pd.isA('vtkPolyData'), 'isA vtkPolyData');
+}
+
+console.log('--- polyData: pipeline integration ---');
+{
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const MockActor = mockVtkClass('vtkActor', {});
+  defaults({ Mapper: MockMapper, Actor: MockActor });
+
+  const pd = polyData({ points: [0,0,0, 1,0,0, 1,1,0], polys: [0,1,2] });
+  const actor = pipeline(pd).actor();
+  assert(unwrap(actor).isA('vtkActor'), 'pipeline from polyData creates actor');
+  assert(unwrap(actor)._model._mapper !== undefined, 'actor has mapper');
+
+  defaults({ Mapper: null, Actor: null });
 }
 
 // ---------------------------------------------------------------------------

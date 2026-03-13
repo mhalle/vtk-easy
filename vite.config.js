@@ -4,6 +4,7 @@ import path from 'path';
 export default defineConfig({
   resolve: {
     alias: {
+      'vtk-easy/polydata': path.resolve(__dirname, 'polydata.js'),
       'vtk-easy': path.resolve(__dirname, 'index.js'),
     },
   },
@@ -33,6 +34,7 @@ export default defineConfig({
       '@kitware/vtk.js/Filters/General/Calculator',
       '@kitware/vtk.js/Filters/General/WarpScalar',
       '@kitware/vtk.js/Interaction/Style/InteractorStyleImage',
+      '@kitware/vtk.js/Common/Core/CellArray',
       '@kitware/vtk.js/Common/Core/DataArray',
       '@kitware/vtk.js/Common/Core/DataArray/Constants',
       '@kitware/vtk.js/Common/Core/LookupTable',
