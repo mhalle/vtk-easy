@@ -51,8 +51,7 @@ view.interactor.setInteractorStyle(iStyle);
 // Camera setup (raw — scene-specific positioning)
 const camera = view.renderer.getActiveCamera();
 const position = camera.getFocalPoint();
-const mapper = ez.unwrap(actor).getMapper();
-const normal = mapper.getSlicingModeNormal();
+const normal = actor.mapper.getSlicingModeNormal();
 position[0] += normal[0];
 position[1] += normal[1];
 position[2] += normal[2];

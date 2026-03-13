@@ -36,7 +36,7 @@ const simpleFilter = vtkCalculator.newInstance();
 simpleFilter.setFormulaSimple(FieldDataTypes.POINT, [], 'z',
   (x) => (x[0] - 0.5) * (x[0] - 0.5) + (x[1] - 0.5) * (x[1] - 0.5) + 0.125
 );
-simpleFilter.setInputConnection(planeSource.getOutputPort());
+simpleFilter.setInputConnection(planeSource.outputPort);
 
 const warpScalar = ez.create(vtkWarpScalar);
 warpScalar.setInputArrayToProcess(0, 'z', 'PointData', 'Scalars');

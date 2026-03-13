@@ -65,7 +65,11 @@ console.log(cone.height);   // calls getHeight()
 // sub-objects are auto-wrapped too
 actor.property.color = [1, 0, 0];  // getProperty() → setColor()
 
-// all existing methods pass through
+// getXxx() results are available as properties too
+cone.outputPort          // calls getOutputPort()
+actor.mapper             // calls getMapper(), auto-wrapped
+
+// all existing methods still pass through
 cone.getOutputPort();   // works
 cone.isA('vtkObject');  // works
 cone.set({ height: 3 }); // works
@@ -150,7 +154,7 @@ const actor = ez.pipeline(planeSource)
   .actor();
 
 // glyph source on port 1
-ez.unwrap(actor).getMapper().setInputConnection(coneSource.getOutputPort(), 1);
+actor.mapper.setInputConnection(coneSource.outputPort, 1);
 ```
 
 ### `view.add(...props)`

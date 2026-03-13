@@ -64,7 +64,7 @@ const actor = ez.pipeline(planeSource)
   .actor();
 
 // Wire glyph input manually (port 1)
-ez.unwrap(actor).getMapper().setInputConnection(ez.unwrap(coneGlyph).getOutputPort(), 1);
+actor.mapper.setInputConnection(coneGlyph.outputPort, 1);
 
 view.add(actor);
 

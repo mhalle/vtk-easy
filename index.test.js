@@ -362,6 +362,28 @@ console.log('--- wrap auto-unwraps method arguments ---');
   assert(received === 'hello', 'non-vtk arg passed through unchanged');
 }
 
+console.log('--- proxy property access for getOutputPort ---');
+{
+  const portFn = () => 'port-object';
+  const source = mockVtkObject('vtkConeSource', {});
+  source.getOutputPort = portFn;
+  const wrappedSource = wrap(source);
+
+  // outputPort as property should call getOutputPort() and return the result
+  const port = wrappedSource.outputPort;
+  assert(port === 'port-object', 'outputPort property calls getOutputPort()');
+
+  // setInputConnection with port value and index
+  let receivedArgs = null;
+  const mapper = mockVtkObject('vtkMapper', {});
+  mapper.setInputConnection = (...args) => { receivedArgs = args; };
+  const wrappedMapper = wrap(mapper);
+
+  wrappedMapper.setInputConnection(wrappedSource.outputPort, 1);
+  assert(receivedArgs[0] === 'port-object', 'port value passed correctly');
+  assert(receivedArgs[1] === 1, 'port index passed correctly');
+}
+
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
