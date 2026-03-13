@@ -54,7 +54,7 @@ view.renderWindow.render();
 ## Install
 
 ```bash
-npm install vtk-easy @kitware/vtk.js
+npm install mhalle/vtk-easy @kitware/vtk.js
 ```
 
 ## Quick start
