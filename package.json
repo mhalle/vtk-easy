@@ -1,6 +1,6 @@
 {
   "name": "vtk-easy",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Ergonomic veneer over vtk.js — property-style access, declarative pipelines, viewer boilerplate reduction",
   "type": "module",
   "main": "./index.js",

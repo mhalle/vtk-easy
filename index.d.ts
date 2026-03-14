@@ -25,6 +25,14 @@ interface VtkClass<T extends VtkObject = VtkObject> {
   newInstance(initialValues?: Record<string, any>): T;
 }
 
+/** Options for view.show(). */
+interface ShowOptions {
+  /** Whether to reset the camera after adding actors. Default: true. */
+  resetCamera?: boolean;
+  /** Whether to render after adding actors. Default: true. */
+  render?: boolean;
+}
+
 /** A wrapped vtk.js object with property-style access. */
 export type Wrapped<T extends VtkObject = VtkObject> = T & {
   /** Access any vtk getter as a property: obj.height → obj.getHeight() */
@@ -60,6 +68,16 @@ export type Wrapped<T extends VtkObject = VtkObject> = T & {
    *   source.mapper().actor()                  — explicit mapper, default actor
    */
   actor(typeOrProps?: VtkClass | Record<string, any>, props?: Record<string, any>): Wrapped;
+
+  /**
+   * Add actors to the renderer, reset camera, and render (synthetic on view-like objects).
+   * Last argument may be options: { resetCamera?: boolean, render?: boolean }.
+   * Returns the wrapped view for chaining.
+   *
+   *   view.show(actor1, actor2)
+   *   view.show(actor, { resetCamera: false })
+   */
+  show(...actorsAndOptions: (VtkObject | Wrapped | ShowOptions)[]): Wrapped<T>;
 };
 
 // ---------------------------------------------------------------------------

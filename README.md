@@ -45,10 +45,7 @@ const pointSource = ez.create(vtkPointSource, { numberOfPoints: 25, radius: 0.25
 
 const pointsActor = pointSource.actor({ property: { pointSize: 5 } });
 const outlineActor = pointSource.pipe(vtkOutlineFilter).actor({ property: { lineWidth: 5 } });
-view.add(pointsActor, outlineActor);
-
-view.renderer.resetCamera();
-view.renderWindow.render();
+view.show(pointsActor, outlineActor);
 ```
 
 ## Install
@@ -70,12 +67,9 @@ const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] });
 const cone = ez.create(vtkConeSource, { height: 1.5 });
 
 const actor = cone.actor();
-view.add(actor);
-
 actor.property.color = rgb('tomato');  // CSS colors — see vtk-easy/color
 
-view.renderer.resetCamera();
-view.renderWindow.render();
+view.show(actor);
 ```
 
 ## API
@@ -208,28 +202,44 @@ const actor = source
   .actor();
 ```
 
-### `view.add(...props)`
+### `view.show(...actors, options?)`
 
-Any wrapped object with `getRenderer()` (FullScreenRenderWindow, GenericRenderWindow, etc.) gets a synthetic `add()` method that accepts actors, volumes, image slices — anything that is a vtkProp. Returns the view, so calls can be chained.
+Add actors to the renderer, reset the camera, and render — the most common three-line sequence collapsed into one call. Available on any wrapped object with `getRenderer()` (FullScreenRenderWindow, GenericRenderWindow, etc.). Returns the view for chaining.
 
 ```js
-view.add(actor1, actor2, volume);
+view.show(actor1, actor2);
+
+// equivalent to:
+// view.add(actor1, actor2);
+// view.renderer.resetCamera();
+// view.renderWindow.render();
 ```
 
-Or chain inline:
+Options (last argument, if it's a plain object):
+
+```js
+view.show(actor, { resetCamera: false });  // add + render, skip camera reset
+view.show(actor, { render: false });       // add + reset, skip render
+```
+
+Chain from creation:
 
 ```js
 const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] })
-  .add(cone1.actor())
-  .add(cone2.actor({ property: { color: [1, 0, 0] } }));
+  .show(cone.actor(), sphere.actor());
 ```
 
-Does one thing: calls `addViewProp` for each prop. No hidden resetCamera or render — those are explicit:
+### `view.add(...props)`
+
+Like `show()`, but only adds actors — no camera reset or render. Use when you need fine-grained control.
 
 ```js
+view.add(actor1, actor2);
 view.renderer.resetCamera();
 view.renderWindow.render();
 ```
+
+Returns the view for chaining.
 
 ### `rgb(cssColor)` / `rgba(cssColor, alpha?)`
 

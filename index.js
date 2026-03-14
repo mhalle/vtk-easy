@@ -145,6 +145,28 @@ function wrap(instance) {
         };
       }
 
+      // synthetic show() — add actors, reset camera, render
+      if (prop === 'show' && typeof target.getRenderer === 'function') {
+        return (...args) => {
+          const renderer = target.getRenderer();
+          const renderWindow = target.getRenderWindow();
+
+          // last arg may be options
+          let actors = args;
+          let opts = {};
+          if (args.length > 0 && args[args.length - 1] !== null &&
+              typeof args[args.length - 1] === 'object' && !isVtkObject(args[args.length - 1])) {
+            opts = args[args.length - 1];
+            actors = args.slice(0, -1);
+          }
+
+          actors.forEach((a) => renderer.addViewProp(unwrap(a)));
+          if (opts.resetCamera !== false) renderer.resetCamera();
+          if (opts.render !== false) renderWindow.render();
+          return receiver;
+        };
+      }
+
       // try the getXxx() convention
       const getter = target[`get${cap}`];
       if (typeof getter === 'function') {

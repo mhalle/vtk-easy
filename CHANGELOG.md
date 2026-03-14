@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0
+
+### Added
+- `view.show(...actors, options?)` — add actors, reset camera, and render in one call. Options `{ resetCamera: false }` and `{ render: false }` for fine-grained control. Returns the view for chaining.
+
 ## 0.5.0
 
 ### Added

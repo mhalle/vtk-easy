@@ -553,6 +553,107 @@ console.log('--- view.add ---');
   assert(added.length === 4, 'view.add chaining works');
 }
 
+console.log('--- view.show: add + resetCamera + render ---');
+{
+  const added = [];
+  let cameraReset = false;
+  let rendered = false;
+  const mockRenderer = {
+    addViewProp: (a) => added.push(a),
+    resetCamera: () => { cameraReset = true; },
+    isA: () => true,
+  };
+  const mockRenderWindow = {
+    render: () => { rendered = true; },
+    isA: () => true,
+  };
+  const mockView = mockVtkObject('vtkFullScreenRenderWindow', {});
+  mockView.getRenderer = () => mockRenderer;
+  mockView.getRenderWindow = () => mockRenderWindow;
+  const wrappedView = wrap(mockView);
+
+  const actor1 = mockVtkObject('vtkActor', {});
+  const actor2 = mockVtkObject('vtkActor', {});
+
+  const result = wrappedView.show(wrap(actor1), actor2);
+  assert(added.length === 2, 'show added two actors');
+  assert(added[0] === actor1, 'show unwrapped first actor');
+  assert(cameraReset, 'show called resetCamera');
+  assert(rendered, 'show called render');
+  assert(result === wrappedView, 'show returns the wrapped view');
+}
+
+console.log('--- view.show: resetCamera false ---');
+{
+  let cameraReset = false;
+  let rendered = false;
+  const mockRenderer = {
+    addViewProp: () => {},
+    resetCamera: () => { cameraReset = true; },
+    isA: () => true,
+  };
+  const mockRenderWindow = {
+    render: () => { rendered = true; },
+    isA: () => true,
+  };
+  const mockView = mockVtkObject('vtkFullScreenRenderWindow', {});
+  mockView.getRenderer = () => mockRenderer;
+  mockView.getRenderWindow = () => mockRenderWindow;
+  const wrappedView = wrap(mockView);
+
+  const actor = mockVtkObject('vtkActor', {});
+  wrappedView.show(actor, { resetCamera: false });
+  assert(!cameraReset, 'resetCamera skipped');
+  assert(rendered, 'render still called');
+}
+
+console.log('--- view.show: render false ---');
+{
+  let cameraReset = false;
+  let rendered = false;
+  const mockRenderer = {
+    addViewProp: () => {},
+    resetCamera: () => { cameraReset = true; },
+    isA: () => true,
+  };
+  const mockRenderWindow = {
+    render: () => { rendered = true; },
+    isA: () => true,
+  };
+  const mockView = mockVtkObject('vtkFullScreenRenderWindow', {});
+  mockView.getRenderer = () => mockRenderer;
+  mockView.getRenderWindow = () => mockRenderWindow;
+  const wrappedView = wrap(mockView);
+
+  const actor = mockVtkObject('vtkActor', {});
+  wrappedView.show(actor, { render: false });
+  assert(cameraReset, 'resetCamera still called');
+  assert(!rendered, 'render skipped');
+}
+
+console.log('--- view.show: chaining ---');
+{
+  const added = [];
+  const mockRenderer = {
+    addViewProp: (a) => added.push(a),
+    resetCamera: () => {},
+    isA: () => true,
+  };
+  const mockRenderWindow = {
+    render: () => {},
+    isA: () => true,
+  };
+  const mockView = mockVtkObject('vtkFullScreenRenderWindow', {});
+  mockView.getRenderer = () => mockRenderer;
+  mockView.getRenderWindow = () => mockRenderWindow;
+  const wrappedView = wrap(mockView);
+
+  const a1 = mockVtkObject('vtkActor', {});
+  const a2 = mockVtkObject('vtkActor', {});
+  wrappedView.show(a1).show(a2);
+  assert(added.length === 2, 'show chaining works');
+}
+
 console.log('--- wrap auto-unwraps method arguments ---');
 {
   let received = null;
