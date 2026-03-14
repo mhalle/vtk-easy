@@ -64,6 +64,7 @@ import '@kitware/vtk.js/Rendering/Profiles/Geometry';
 import vtkFullScreenRenderWindow from '@kitware/vtk.js/Rendering/Misc/FullScreenRenderWindow';
 import vtkConeSource from '@kitware/vtk.js/Filters/Sources/ConeSource';
 import ez from 'vtk-easy';
+import { rgb } from 'vtk-easy/color';
 
 const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] });
 const cone = ez.create(vtkConeSource, { height: 1.5 });
@@ -71,7 +72,7 @@ const cone = ez.create(vtkConeSource, { height: 1.5 });
 const actor = cone.actor();
 view.add(actor);
 
-actor.property.color = [0.9, 0.2, 0.3];
+actor.property.color = rgb('tomato');  // CSS colors — see vtk-easy/color
 
 view.renderer.resetCamera();
 view.renderWindow.render();
@@ -229,6 +230,42 @@ Does one thing: calls `addViewProp` for each prop. No hidden resetCamera or rend
 view.renderer.resetCamera();
 view.renderWindow.render();
 ```
+
+### `rgb(cssColor)` / `rgba(cssColor, alpha?)`
+
+Parse any CSS Color Level 4 string into an sRGB tuple for vtk.js. Imported from the separate `vtk-easy/color` entry point so that the `culori` dependency is only bundled if you use it.
+
+```js
+import { rgb, rgba } from 'vtk-easy/color';
+```
+
+`rgb()` returns a 3-tuple `[r, g, b]` in 0–1 range:
+
+```js
+rgb('tomato')              // [1, 0.388, 0.278]
+rgb('#4a90d9')             // [0.290, 0.565, 0.851]
+rgb('hsl(210, 80%, 50%)')  // [0.100, 0.500, 0.900]
+rgb('oklch(0.7 0.15 210)') // [r, g, b]
+```
+
+`rgba()` returns a 4-tuple `[r, g, b, a]`. Alpha comes from the CSS string if present, or from the optional second argument (which overrides string alpha). Defaults to 1.
+
+```js
+rgba('tomato')                  // [1, 0.388, 0.278, 1]
+rgba('tomato', 0.5)             // [1, 0.388, 0.278, 0.5]
+rgba('rgba(255, 99, 71, 0.3)')  // [1, 0.388, 0.278, 0.3]
+rgba('rgba(255, 99, 71, 0.3)', 0.8)  // override → alpha 0.8
+```
+
+Use anywhere vtk.js expects a color array:
+
+```js
+actor.property.color = rgb('tomato');
+actor.property.diffuseColor = rgb('hsl(210, 80%, 50%)');
+actor.property.edgeColor = rgb('#4a90d9');
+```
+
+All CSS Color Level 4 formats are supported: named colors, hex (`#rgb`, `#rrggbb`, `#rrggbbaa`), `rgb()`, `hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, and more. Conversion to sRGB is handled by [culori](https://culorijs.org/).
 
 ### `ez.merge(spec)`
 

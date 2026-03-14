@@ -1,5 +1,9 @@
 /**
- * vtk-easy/color — CSS color strings to vtk.js tuples
+ * vtk-easy/color — CSS Color Level 4 strings to sRGB tuples for vtk.js
+ *
+ * Converts any CSS color (named, hex, rgb(), hsl(), oklch(), etc.) to
+ * sRGB components in 0–1 range. vtk.js passes colors to WebGL which
+ * assumes an sRGB framebuffer, so sRGB is the correct target space.
  *
  * Usage:
  *   import { rgb, rgba } from 'vtk-easy/color';
