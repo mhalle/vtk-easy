@@ -170,6 +170,37 @@ interface PipeTemplate {
 export function pipe(type: VtkClass, props?: Record<string, any>): PipeTemplate;
 
 // ---------------------------------------------------------------------------
+// merge — multi-input wiring
+// ---------------------------------------------------------------------------
+
+type MergeSource = VtkObject | Wrapped;
+
+/** Port map: port number → source or array of sources. */
+type MergePortMap = Record<number, MergeSource | MergeSource[]>;
+
+interface MergeResult {
+  /** Wire all merged inputs into a downstream filter/mapper. */
+  pipe<U extends VtkObject>(
+    typeOrInstance: VtkClass<U> | U | Wrapped<U>,
+    props?: Record<string, any>,
+  ): Wrapped<U>;
+}
+
+/**
+ * Wire multiple sources into a multi-input filter or mapper.
+ *
+ * Array form — addInputConnection (all on port 0):
+ *   ez.merge([source1, source2]).pipe(vtkAppendPolyData)
+ *
+ * Object form — setInputConnection per port:
+ *   ez.merge({ 0: mainSource, 1: glyphSource }).pipe(vtkGlyph3DMapper)
+ *
+ * Mixed — array value means addInputConnection on that port:
+ *   ez.merge({ 0: [src1, src2], 1: glyph }).pipe(vtkGlyph3DMapper)
+ */
+export function merge(spec: MergeSource[] | MergePortMap): MergeResult;
+
+// ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 
@@ -193,6 +224,7 @@ declare const ez: {
   create: typeof create;
   createViewer: typeof createViewer;
   pipe: typeof pipe;
+  merge: typeof merge;
   applyProps: typeof applyProps;
   wireChain: typeof wireChain;
   isVtkObject: typeof isVtkObject;

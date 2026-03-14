@@ -79,17 +79,6 @@ view.renderWindow.render();
 
 ## API
 
-### `ez.defaults(config)`
-
-Override the built-in Mapper/Actor used by `.mapper()` and `.actor()`. By default vtk-easy uses `vtkMapper` and `vtkActor`, so most code never needs this.
-
-```js
-ez.defaults({
-  Mapper: vtkMyCustomMapper,
-  Actor: vtkMyCustomActor,
-});
-```
-
 ### `ez.create(VtkClass, props?)`
 
 Shorthand for `VtkClass.newInstance(props)` that returns a wrapped instance.
@@ -218,17 +207,58 @@ const actor = source
   .actor();
 ```
 
-**Multi-port** — wire manually after building:
+### `view.add(...props)`
+
+Any wrapped object with `getRenderer()` (FullScreenRenderWindow, GenericRenderWindow, etc.) gets a synthetic `add()` method that accepts actors, volumes, image slices — anything that is a vtkProp. Returns the view, so calls can be chained.
 
 ```js
-const actor = planeSource
-  .pipe(calculator)
-  .mapper(vtkGlyph3DMapper, { orientationArray: 'pressure' })
-  .actor();
-
-// glyph source on port 1
-actor.getMapper().setInputConnection(coneSource.outputPort, 1);
+view.add(actor1, actor2, volume);
 ```
+
+Or chain inline:
+
+```js
+const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] })
+  .add(cone1.actor())
+  .add(cone2.actor({ property: { color: [1, 0, 0] } }));
+```
+
+Does one thing: calls `addViewProp` for each prop. No hidden resetCamera or render — those are explicit:
+
+```js
+view.renderer.resetCamera();
+view.renderWindow.render();
+```
+
+### `ez.merge(spec)`
+
+Wire multiple sources into a multi-input filter or mapper. Accepts an array or an object.
+
+**Array form** — `addInputConnection` (all on port 0):
+
+```js
+ez.merge([source1, source2, source3])
+  .pipe(vtkAppendPolyData)
+  .actor()
+```
+
+**Object form** — `setInputConnection` per port:
+
+```js
+ez.merge({ 0: planeSource.pipe(calculator), 1: coneGlyph })
+  .pipe(vtkGlyph3DMapper, { orientationArray: 'pressure' })
+  .actor()
+```
+
+**Mixed** — array value means `addInputConnection` on that port, scalar means `setInputConnection`:
+
+```js
+ez.merge({ 0: [src1, src2], 1: glyphSource })
+  .pipe(vtkGlyph3DMapper)
+  .actor()
+```
+
+The result of `merge()` has a `.pipe()` method that returns a wrapped object, so you can chain `.mapper()`, `.actor()`, etc. as usual.
 
 ### `ez.pipe(type, props?)` — deferred pipeline template
 
@@ -269,27 +299,15 @@ view.add(coneActor, sphereActor);
 
 Only classes are accepted — passing an instance throws, since instances would be shared across calls. Use eager `.pipe()` for instances.
 
-### `view.add(...props)`
+### `ez.defaults(config)`
 
-Any wrapped object with `getRenderer()` (FullScreenRenderWindow, GenericRenderWindow, etc.) gets a synthetic `add()` method that accepts actors, volumes, image slices — anything that is a vtkProp. Returns the view, so calls can be chained.
-
-```js
-view.add(actor1, actor2, volume);
-```
-
-Or chain inline:
+Override the built-in Mapper/Actor used by `.mapper()` and `.actor()`. By default vtk-easy uses `vtkMapper` and `vtkActor`, so most code never needs this.
 
 ```js
-const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] })
-  .add(cone1.actor())
-  .add(cone2.actor({ property: { color: [1, 0, 0] } }));
-```
-
-Does one thing: calls `addViewProp` for each prop. No hidden resetCamera or render — those are explicit:
-
-```js
-view.renderer.resetCamera();
-view.renderWindow.render();
+ez.defaults({
+  Mapper: vtkMyCustomMapper,
+  Actor: vtkMyCustomActor,
+});
 ```
 
 ### `ez.applyProps(target, props)`

@@ -450,8 +450,59 @@ function pipe(type, props) {
 }
 
 // ---------------------------------------------------------------------------
+// merge — multi-input wiring
+// ---------------------------------------------------------------------------
+//
+// Array form — addInputConnection on port 0:
+//   ez.merge([source1, source2]).pipe(vtkAppendPolyData).actor()
+//
+// Object form — setInputConnection per port:
+//   ez.merge({ 0: mainSource, 1: glyphSource }).pipe(vtkGlyph3DMapper).actor()
+//
+// Mixed — array value means addInputConnection on that port:
+//   ez.merge({ 0: [src1, src2], 1: glyph }).pipe(vtkGlyph3DMapper).actor()
+
+const MERGE_TAG = Symbol('vtkEasyMerge');
+
+function merge(spec) {
+  // Normalize: array → { 0: [...] }, object stays as-is
+  let ports;
+  if (Array.isArray(spec)) {
+    ports = { 0: spec };
+  } else {
+    ports = spec;
+  }
+
+  // Return an object tagged so .pipe() on it knows to wire multi-input
+  return {
+    [MERGE_TAG]: true,
+    _ports: ports,
+    pipe(typeOrInstance, props) {
+      const downstream = resolveArg(typeOrInstance, props);
+      for (const [port, sources] of Object.entries(ports)) {
+        const portNum = Number(port);
+        const list = Array.isArray(sources) ? sources : [sources];
+        for (const src of list) {
+          const raw = unwrap(src);
+          if (typeof raw.getOutputPort === 'function') {
+            if (Array.isArray(sources)) {
+              downstream.addInputConnection(raw.getOutputPort());
+            } else {
+              downstream.setInputConnection(raw.getOutputPort(), portNum);
+            }
+          } else {
+            downstream.setInputData(raw, portNum);
+          }
+        }
+      }
+      return wrap(downstream);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // exports
 // ---------------------------------------------------------------------------
 
-export { defaults, wrap, unwrap, create, pipe, applyProps, wireChain, isVtkObject, defineFilter, defineSource, prop };
-export default { defaults, wrap, unwrap, create, pipe, applyProps, wireChain, isVtkObject, defineFilter, defineSource, prop };
+export { defaults, wrap, unwrap, create, pipe, merge, applyProps, wireChain, isVtkObject, defineFilter, defineSource, prop };
+export default { defaults, wrap, unwrap, create, pipe, merge, applyProps, wireChain, isVtkObject, defineFilter, defineSource, prop };

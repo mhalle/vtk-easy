@@ -23,6 +23,10 @@ function mockVtkObject(className, defaults = {}) {
     getClassName: () => className,
     getOutputPort: () => { const fn = () => model; fn.filter = api; return fn; },
     setInputConnection: (port, portIdx = 0) => { model[`_input${portIdx}`] = port; },
+    addInputConnection: (port) => {
+      if (!model._addedInputs) model._addedInputs = [];
+      model._addedInputs.push(port);
+    },
     setInputData: (data, port = 0) => { model[`_data${port}`] = data; },
     getProperty: () => mockVtkObject('vtkProperty'),
     set: (map) => { Object.assign(model, map); },
@@ -597,8 +601,91 @@ console.log('--- proxy property access for getOutputPort ---');
 // defineFilter / defineSource (uses real vtk.js macros)
 // ---------------------------------------------------------------------------
 
-import { defineFilter, defineSource, prop, pipe } from './index.js';
+import { defineFilter, defineSource, prop, pipe, merge } from './index.js';
 import { polyData } from './polydata.js';
+
+// ---------------------------------------------------------------------------
+// Tests: merge()
+// ---------------------------------------------------------------------------
+
+console.log('--- merge: array form (addInputConnection) ---');
+{
+  const src1 = mockVtkObject('vtkSource1', {});
+  const src2 = mockVtkObject('vtkSource2', {});
+  const src3 = mockVtkObject('vtkSource3', {});
+  const MockAppend = mockVtkClass('vtkAppendPolyData', {});
+
+  const result = merge([wrap(src1), wrap(src2), wrap(src3)]).pipe(MockAppend);
+  const raw = unwrap(result);
+  assert(raw.isA('vtkAppendPolyData'), 'merge array creates filter');
+  assert(raw._model._addedInputs.length === 3, 'three inputs added via addInputConnection');
+}
+
+console.log('--- merge: object form (setInputConnection) ---');
+{
+  const main = mockVtkObject('vtkMain', {});
+  const glyph = mockVtkObject('vtkGlyph', {});
+  const MockMapper = mockVtkClass('vtkGlyph3DMapper', {});
+
+  const result = merge({ 0: wrap(main), 1: wrap(glyph) }).pipe(MockMapper);
+  const raw = unwrap(result);
+  assert(raw.isA('vtkGlyph3DMapper'), 'merge object creates mapper');
+  assert(raw._model._input0 !== undefined, 'port 0 wired via setInputConnection');
+  assert(raw._model._input1 !== undefined, 'port 1 wired via setInputConnection');
+}
+
+console.log('--- merge: mixed (array value = addInputConnection on that port) ---');
+{
+  const src1 = mockVtkObject('vtkSource1', {});
+  const src2 = mockVtkObject('vtkSource2', {});
+  const glyph = mockVtkObject('vtkGlyph', {});
+  const MockMapper = mockVtkClass('vtkGlyph3DMapper', {});
+
+  const result = merge({ 0: [wrap(src1), wrap(src2)], 1: wrap(glyph) }).pipe(MockMapper);
+  const raw = unwrap(result);
+  assert(raw._model._addedInputs.length === 2, 'port 0: two inputs added');
+  assert(raw._model._input1 !== undefined, 'port 1: single input set');
+}
+
+console.log('--- merge: unwrapped sources work ---');
+{
+  const src1 = mockVtkObject('vtkSource1', {});
+  const src2 = mockVtkObject('vtkSource2', {});
+  const MockAppend = mockVtkClass('vtkAppendPolyData', {});
+
+  const result = merge([src1, src2]).pipe(MockAppend);
+  assert(unwrap(result)._model._addedInputs.length === 2, 'raw instances accepted');
+}
+
+console.log('--- merge: data objects (no getOutputPort) ---');
+{
+  const data1 = mockVtkObject('vtkPolyData1', {});
+  delete data1.getOutputPort;
+  const data2 = mockVtkObject('vtkPolyData2', {});
+  delete data2.getOutputPort;
+  const MockAppend = mockVtkClass('vtkAppendPolyData', {});
+
+  const result = merge({ 0: data1, 1: data2 }).pipe(MockAppend);
+  const raw = unwrap(result);
+  assert(raw._model._data0 === data1, 'data object on port 0 via setInputData');
+  assert(raw._model._data1 === data2, 'data object on port 1 via setInputData');
+}
+
+console.log('--- merge: chaining to .mapper().actor() ---');
+{
+  const src1 = mockVtkObject('vtkSource1', {});
+  const src2 = mockVtkObject('vtkSource2', {});
+  const MockAppend = mockVtkClass('vtkAppendPolyData', {});
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const MockActor = mockActorClass();
+  defaults({ Mapper: MockMapper, Actor: MockActor });
+
+  const actor = merge([wrap(src1), wrap(src2)]).pipe(MockAppend).actor();
+  assert(unwrap(actor).isA('vtkActor'), 'merge → pipe → actor works');
+  assert(unwrap(actor)._model._mapper !== undefined, 'actor has mapper');
+
+  defaults({ Mapper: null, Actor: null });
+}
 
 console.log('--- defineFilter: basic ---');
 {

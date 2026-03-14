@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0
+
+### Added
+- Synthetic `.pipe()`, `.mapper()`, `.actor()` methods on all wrapped objects — build pipelines by chaining directly from sources: `cone.pipe(vtkNormals).actor()`.
+- `ez.merge()` for multi-input wiring — array form uses `addInputConnection`, object form uses `setInputConnection` per port, mixed form supports both.
+- `.mapper()` and `.actor()` on deferred `ez.pipe()` templates.
+- `hasGetter` guard prevents `.mapper()`/`.actor()` synthetics from shadowing `getMapper()`/`getActor()` property access on actors.
+
+### Removed
+- `pipeline()` and `PipelineBuilder` — replaced by synthetic methods on wrapped objects.
+- `.filter()` — redundant alias for `.pipe()`.
+
+### Changed
+- All examples migrated from `pipeline()` to the new chaining API.
+- README rewritten with API sections ordered by usage frequency.
+
 ## 0.3.0
 
 ### Added
