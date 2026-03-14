@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+### Added
+- `rgb()` and `rgba()` color utilities — parse any CSS Color Level 4 string (named colors, hex, `rgb()`, `hsl()`, `oklch()`, etc.) into sRGB `[r, g, b]` or `[r, g, b, a]` tuples for vtk.js.
+- Separate entry point `vtk-easy/color` so `culori` is only bundled if you use it.
+- `culori` added as a dependency for CSS color parsing.
+
 ## 0.4.0
 
 ### Added

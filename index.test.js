@@ -1080,6 +1080,95 @@ console.log('--- polyData: actor integration ---');
   defaults({ Mapper: null, Actor: null });
 }
 
+// ===========================================================================
+// color module
+// ===========================================================================
+
+import { rgb, rgba } from './color.js';
+
+console.log('--- rgb: named colors ---');
+{
+  const c = rgb('tomato');
+  assert(c.length === 3, 'rgb returns 3-tuple');
+  assert(Math.abs(c[0] - 1) < 0.01, 'tomato r ≈ 1');
+  assert(Math.abs(c[1] - 0.388) < 0.01, 'tomato g ≈ 0.388');
+  assert(Math.abs(c[2] - 0.278) < 0.01, 'tomato b ≈ 0.278');
+
+  const w = rgb('white');
+  assert(w[0] === 1 && w[1] === 1 && w[2] === 1, 'white = [1,1,1]');
+
+  const b = rgb('black');
+  assert(b[0] === 0 && b[1] === 0 && b[2] === 0, 'black = [0,0,0]');
+}
+
+console.log('--- rgb: hex colors ---');
+{
+  const c = rgb('#ff0000');
+  assert(c[0] === 1 && c[1] === 0 && c[2] === 0, '#ff0000 = red');
+
+  const c2 = rgb('#00ff00');
+  assert(c2[0] === 0 && c2[1] === 1 && c2[2] === 0, '#00ff00 = green');
+
+  // short hex
+  const c3 = rgb('#f00');
+  assert(c3[0] === 1 && c3[1] === 0 && c3[2] === 0, '#f00 = red');
+}
+
+console.log('--- rgb: hsl ---');
+{
+  const c = rgb('hsl(0, 100%, 50%)');
+  assert(Math.abs(c[0] - 1) < 0.01, 'hsl red r ≈ 1');
+  assert(Math.abs(c[1]) < 0.01, 'hsl red g ≈ 0');
+  assert(Math.abs(c[2]) < 0.01, 'hsl red b ≈ 0');
+}
+
+console.log('--- rgb: rgb() function ---');
+{
+  const c = rgb('rgb(128, 0, 255)');
+  assert(Math.abs(c[0] - 128/255) < 0.01, 'rgb() r');
+  assert(c[1] === 0, 'rgb() g');
+  assert(Math.abs(c[2] - 1) < 0.01, 'rgb() b');
+}
+
+console.log('--- rgb: ignores alpha ---');
+{
+  const c = rgb('rgba(255, 0, 0, 0.5)');
+  assert(c.length === 3, 'rgb always returns 3-tuple');
+  assert(c[0] === 1, 'rgb ignores alpha, returns r');
+}
+
+console.log('--- rgb: invalid color throws ---');
+{
+  let threw = false;
+  try { rgb('notacolor'); } catch (e) { threw = true; }
+  assert(threw, 'rgb throws on invalid color');
+}
+
+console.log('--- rgba: default alpha ---');
+{
+  const c = rgba('tomato');
+  assert(c.length === 4, 'rgba returns 4-tuple');
+  assert(c[3] === 1, 'default alpha is 1');
+}
+
+console.log('--- rgba: explicit alpha arg ---');
+{
+  const c = rgba('tomato', 0.5);
+  assert(c[3] === 0.5, 'explicit alpha overrides default');
+}
+
+console.log('--- rgba: alpha from string ---');
+{
+  const c = rgba('rgba(255, 0, 0, 0.3)');
+  assert(Math.abs(c[3] - 0.3) < 0.001, 'alpha parsed from string');
+}
+
+console.log('--- rgba: explicit alpha overrides string ---');
+{
+  const c = rgba('rgba(255, 0, 0, 0.3)', 0.8);
+  assert(c[3] === 0.8, 'explicit alpha overrides string alpha');
+}
+
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
