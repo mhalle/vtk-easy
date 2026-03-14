@@ -73,6 +73,22 @@ function wrap(instance) {
         return direct;
       }
 
+      // synthetic pipe() — wire this object's output into a downstream stage
+      //   source.pipe(vtkFilterClass, props?)  → creates, wires, returns wrapped
+      //   source.pipe(existingInstance)         → wires, returns wrapped
+      //   data.pipe(vtkFilterClass)             → uses setInputData
+      if (prop === 'pipe') {
+        return (typeOrInstance, props) => {
+          const downstream = resolveArg(typeOrInstance, props);
+          if (typeof target.getOutputPort === 'function') {
+            downstream.setInputConnection(target.getOutputPort());
+          } else {
+            downstream.setInputData(target);
+          }
+          return wrap(downstream);
+        };
+      }
+
       // synthetic add() for objects with a renderer (FullScreenRenderWindow, etc.)
       if (prop === 'add' && typeof target.getRenderer === 'function') {
         return (...actors) => {
@@ -153,20 +169,19 @@ function create(Type, props = {}) {
 //   );
 
 class PipelineBuilder {
-  constructor(input, isData) {
-    this._source = isData ? null : input;
-    this._data = isData ? input : null;
+  constructor(input) {
+    this._input = input;  // raw vtk instance or data object
     this._filters = [];
     this._mapperConfig = null;
   }
 
   filter(typeOrInstance, props) {
-    this._filters.push(resolveArg(typeOrInstance, props));
+    this._filters.push({ typeOrInstance, props });
     return this;
   }
 
   mapper(typeOrInstance, props) {
-    this._mapperConfig = resolveArg(typeOrInstance, props);
+    this._mapperConfig = { typeOrInstance, props };
     return this;
   }
 
@@ -194,19 +209,17 @@ class PipelineBuilder {
     }
 
     // Resolve mapper
-    const mapper = this._mapperConfig || _defaults.Mapper.newInstance();
+    const mapperCfg = this._mapperConfig;
+    const mapper = mapperCfg
+      ? resolveArg(mapperCfg.typeOrInstance, mapperCfg.props)
+      : _defaults.Mapper.newInstance();
 
-    // Wire: source → filters → mapper
-    const chain = [...this._filters, mapper];
-    if (this._source) {
-      wireChain([this._source, ...chain]);
-    } else if (this._data) {
-      const first = this._filters.length > 0 ? this._filters[0] : mapper;
-      first.setInputData(this._data);
-      if (this._filters.length > 0) {
-        wireChain(chain);
-      }
+    // Wire: input → filters → mapper using pipe()
+    let current = wrap(this._input);
+    for (const { typeOrInstance: ft, props: fp } of this._filters) {
+      current = current.pipe(ft, fp);
     }
+    current.pipe(mapper);
 
     // Actor ← mapper
     actorInstance.setMapper(mapper);
@@ -224,20 +237,18 @@ class PipelineBuilder {
 
 function pipeline(input, props) {
   // Detect what we got:
-  //   vtk class (has newInstance)  → create instance, use as source
-  //   vtk instance (has isA)      → use as source
-  //   wrapped proxy               → unwrap, use as source
+  //   vtk class (has newInstance)  → create instance
+  //   vtk instance or wrapped     → unwrap
   //   anything else               → raw data
+  // pipe() handles algorithm-vs-data detection automatically.
   if (isVtkClass(input)) {
-    return new PipelineBuilder(input.newInstance(props || {}), false);
+    return new PipelineBuilder(input.newInstance(props || {}));
   }
   const raw = unwrap(input);
   if (isVtkObject(raw)) {
-    // If it has getOutputPort it's an algorithm (source/filter); otherwise it's data
-    const isData = typeof raw.getOutputPort !== 'function';
-    return new PipelineBuilder(raw, isData);
+    return new PipelineBuilder(raw);
   }
-  return new PipelineBuilder(input, true);
+  return new PipelineBuilder(input);
 }
 
 // ---------------------------------------------------------------------------

@@ -314,6 +314,74 @@ console.log('--- pipeline: data with filter ---');
   defaults({ Mapper: null, Actor: null });
 }
 
+// ---------------------------------------------------------------------------
+// Tests: pipe()
+// ---------------------------------------------------------------------------
+
+console.log('--- pipe: class ---');
+{
+  const src = mockVtkObject('vtkSource', {});
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const result = wrap(src).pipe(MockFilter);
+  assert(unwrap(result).isA('vtkFilter'), 'pipe creates filter from class');
+  assert(unwrap(result)._model._input0 !== undefined, 'pipe wired input connection');
+}
+
+console.log('--- pipe: class with props ---');
+{
+  const src = mockVtkObject('vtkSource', {});
+  const MockFilter = mockVtkClass('vtkFilter', { factor: 1.0 });
+  const result = wrap(src).pipe(MockFilter, { factor: 2.0 });
+  assert(unwrap(result).getFactor() === 2.0, 'pipe passes props to newInstance');
+  assert(unwrap(result)._model._input0 !== undefined, 'pipe wired input');
+}
+
+console.log('--- pipe: existing instance ---');
+{
+  const src = mockVtkObject('vtkSource', {});
+  const existing = mockVtkObject('vtkFilter', {});
+  const result = wrap(src).pipe(existing);
+  assert(unwrap(result) === existing, 'pipe with instance returns same instance wrapped');
+  assert(existing._model._input0 !== undefined, 'pipe wired existing instance');
+}
+
+console.log('--- pipe: wrapped proxy ---');
+{
+  const src = mockVtkObject('vtkSource', {});
+  const filter = mockVtkObject('vtkFilter', {});
+  const wrappedFilter = wrap(filter);
+  const result = wrap(src).pipe(wrappedFilter);
+  assert(unwrap(result) === filter, 'pipe unwraps wrapped input');
+  assert(filter._model._input0 !== undefined, 'pipe wired unwrapped filter');
+}
+
+console.log('--- pipe: chaining ---');
+{
+  const src = mockVtkObject('vtkSource', {});
+  const MockFilter1 = mockVtkClass('vtkFilter1', {});
+  const MockFilter2 = mockVtkClass('vtkFilter2', {});
+  const result = wrap(src).pipe(MockFilter1).pipe(MockFilter2);
+  assert(unwrap(result).isA('vtkFilter2'), 'chained pipe produces final filter');
+  assert(unwrap(result)._model._input0 !== undefined, 'final filter is wired');
+}
+
+console.log('--- pipe: from data object (no getOutputPort) ---');
+{
+  const data = mockVtkObject('vtkPolyData', {});
+  delete data.getOutputPort;  // simulate a data object
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const result = wrap(data).pipe(MockFilter);
+  assert(unwrap(result)._model._data0 === data, 'pipe from data uses setInputData');
+}
+
+console.log('--- pipe: from plain data ---');
+{
+  const fakeData = { fake: 'polydata' };
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const result = wrap(fakeData).pipe(MockFilter);
+  assert(unwrap(result)._model._data0 === fakeData, 'pipe from plain data uses setInputData');
+}
+
 console.log('--- view.add ---');
 {
   const added = [];

@@ -29,6 +29,20 @@ interface VtkClass<T extends VtkObject = VtkObject> {
 export type Wrapped<T extends VtkObject = VtkObject> = T & {
   /** Access any vtk getter as a property: obj.height → obj.getHeight() */
   [key: string]: any;
+
+  /**
+   * Pipe this object's output into a downstream filter or algorithm.
+   *
+   *   source.pipe(vtkFilter, { prop: val })  // class + props
+   *   source.pipe(existingFilter)             // instance
+   *   data.pipe(vtkMapper)                    // data → setInputData
+   *
+   * Returns the wrapped downstream object for chaining.
+   */
+  pipe<U extends VtkObject>(
+    typeOrInstance: VtkClass<U> | U | Wrapped<U>,
+    props?: Record<string, any>,
+  ): Wrapped<U>;
 };
 
 // ---------------------------------------------------------------------------
@@ -117,52 +131,30 @@ export function createViewer(options?: ViewerOptions): Viewer;
 // pipeline
 // ---------------------------------------------------------------------------
 
-/** A pipeline stage config: either a vtk instance or { type, ...props }. */
-type StageConfig = VtkObject | { type: VtkClass; [key: string]: any };
-
-interface PipelineConfig {
-  /** Source algorithm or config. */
-  source?: StageConfig;
-  /** Direct data input (instead of source). */
-  data?: any;
-  /** Filter stages between source and mapper. */
-  filters?: StageConfig[];
-  /** Mapper config — defaults to defaults().Mapper if no type given. */
-  mapper?: StageConfig | Record<string, any>;
-  /** Actor config — defaults to defaults().Actor if no type given. */
-  actor?: StageConfig | { type?: VtkClass; property?: Record<string, any>; [key: string]: any };
-  /** Renderer to add the actor to. */
-  renderer?: VtkObject;
-  /** Viewer to add the actor to (calls viewer.add). */
-  viewer?: Viewer;
-  /** If true, return raw vtk instances instead of wrapped. */
-  raw?: boolean;
-}
-
-interface PipelineResult {
-  actor: Wrapped;
-  mapper: Wrapped;
-  source?: Wrapped;
-  filters?: Wrapped[];
+interface PipelineBuilder {
+  /** Add a filter stage to the pipeline. */
+  filter(typeOrInstance: VtkClass | VtkObject | Wrapped, props?: Record<string, any>): PipelineBuilder;
+  /** Set a custom mapper (defaults to ez.defaults().Mapper). */
+  mapper(typeOrInstance: VtkClass | VtkObject | Wrapped, props?: Record<string, any>): PipelineBuilder;
+  /** Terminate the pipeline: wire source → filters → mapper → actor, return wrapped actor. */
+  actor(typeOrInstanceOrProps?: VtkClass | Record<string, any>, props?: Record<string, any>): Wrapped;
 }
 
 /**
- * Create and wire a vtk.js pipeline declaratively.
+ * Create a fluent pipeline builder.
  *
- *   const { actor } = pipeline({
- *     source: { type: vtkConeSource, height: 1.5 },
- *     actor: { property: { color: [1, 0, 0] } },
- *     viewer,
- *   });
+ *   ez.pipeline(vtkConeSource, { height: 1.5 }).actor()
+ *   ez.pipeline(vtkConeSource).filter(vtkNormals).actor()
+ *   ez.pipeline(polyData).actor({ property: { color: [1, 0, 0] } })
  */
-export function pipeline(config: PipelineConfig): PipelineResult;
+export function pipeline(
+  input: VtkClass | VtkObject | Wrapped | any,
+  props?: Record<string, any>,
+): PipelineBuilder;
 
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
-
-/** Resolve a config to a vtk.js instance. */
-export function resolve(config: StageConfig | null, FallbackType?: VtkClass): VtkObject | null;
 
 /** Apply a { propName: value } map to a vtk.js instance via setXxx() calls. */
 export function applyProps(target: VtkObject, props: Record<string, any>): void;
@@ -184,7 +176,6 @@ declare const ez: {
   create: typeof create;
   createViewer: typeof createViewer;
   pipeline: typeof pipeline;
-  resolve: typeof resolve;
   applyProps: typeof applyProps;
   wireChain: typeof wireChain;
   isVtkObject: typeof isVtkObject;
