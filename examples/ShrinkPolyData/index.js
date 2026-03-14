@@ -14,7 +14,7 @@ const view = ez.create(vtkFullScreenRenderWindow);
 const reader = ez.create(vtkHttpDataSetReader, { fetchGzip: true });
 const shrink = ez.create(vtkShrinkPolyData, { shrinkFactor: 0.25 });
 
-const actor = ez.pipeline(reader).filter(shrink).actor();
+const actor = reader.pipe(shrink).actor();
 view.add(actor);
 
 reader.setUrl(`${__BASE_PATH__}/data/cow.vtp`).then(() => {

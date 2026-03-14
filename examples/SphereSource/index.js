@@ -10,7 +10,7 @@ import ez from 'vtk-easy';
 const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] });
 
 const source = ez.create(vtkSphereSource);
-const actor = ez.pipeline(source).actor({ property: { edgeVisibility: true } });
+const actor = source.actor({ property: { edgeVisibility: true } });
 view.add(actor);
 
 view.renderer.resetCamera();

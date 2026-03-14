@@ -28,7 +28,7 @@ materialsReader
           const polydata = reader.getOutputData(i);
           const name = polydata.get('name').name;
 
-          const actor = ez.pipeline(polydata).actor();
+          const actor = ez.wrap(polydata).actor();
 
           // Materials need the raw actor for applyMaterialToActor
           materialsReader.applyMaterialToActor(name, ez.unwrap(actor));

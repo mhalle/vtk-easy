@@ -3,10 +3,10 @@
  *
  * Usage:
  *   import ez from 'vtk-easy';
- *   ez.defaults({ RenderWindow: vtkFullScreenRenderWindow, Mapper: vtkMapper, Actor: vtkActor });
- *   const viewer = ez.createViewer({ background: [0, 0, 0] });
- *   const src = ez.create(vtkConeSource, { height: 1.5 });
- *   const { actor } = ez.pipeline({ source: src, viewer });
+ *   const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] });
+ *   const cone = ez.create(vtkConeSource, { height: 1.5 });
+ *   const actor = cone.actor();
+ *   view.add(actor);
  */
 
 // ---------------------------------------------------------------------------
@@ -43,6 +43,23 @@ export type Wrapped<T extends VtkObject = VtkObject> = T & {
     typeOrInstance: VtkClass<U> | U | Wrapped<U>,
     props?: Record<string, any>,
   ): Wrapped<U>;
+
+  /**
+   * Create and wire a mapper. Uses the default Mapper class if none specified.
+   * Tags the result so that .actor() knows to use it directly.
+   */
+  mapper(type?: VtkClass, props?: Record<string, any>): Wrapped;
+
+  /**
+   * Terminal: create an actor wired to a mapper.
+   * If called after .mapper(), uses that mapper; otherwise auto-creates one.
+   *
+   *   source.actor()                          — default mapper + actor
+   *   source.actor({ property: { color } })   — default mapper + actor with props
+   *   source.actor(vtkImageSlice, props?)      — default mapper + explicit actor type
+   *   source.mapper().actor()                  — explicit mapper, default actor
+   */
+  actor(typeOrProps?: VtkClass | Record<string, any>, props?: Record<string, any>): Wrapped;
 };
 
 // ---------------------------------------------------------------------------
@@ -52,13 +69,13 @@ export type Wrapped<T extends VtkObject = VtkObject> = T & {
 interface DefaultsConfig {
   /** Default RenderWindow class for createViewer(). */
   RenderWindow?: VtkClass | null;
-  /** Default Mapper class for pipeline(). */
+  /** Default Mapper class for .mapper() / .actor(). */
   Mapper?: VtkClass | null;
-  /** Default Actor class for pipeline(). */
+  /** Default Actor class for .actor(). */
   Actor?: VtkClass | null;
 }
 
-/** Configure default classes used by createViewer() and pipeline(). */
+/** Configure default Mapper/Actor classes used by .mapper() and .actor(). */
 export function defaults(config: DefaultsConfig): void;
 
 // ---------------------------------------------------------------------------
@@ -128,29 +145,29 @@ interface Viewer {
 export function createViewer(options?: ViewerOptions): Viewer;
 
 // ---------------------------------------------------------------------------
-// pipeline
+// pipe — deferred pipeline template
 // ---------------------------------------------------------------------------
 
-interface PipelineBuilder {
-  /** Add a filter stage to the pipeline. */
-  filter(typeOrInstance: VtkClass | VtkObject | Wrapped, props?: Record<string, any>): PipelineBuilder;
-  /** Set a custom mapper (defaults to ez.defaults().Mapper). */
-  mapper(typeOrInstance: VtkClass | VtkObject | Wrapped, props?: Record<string, any>): PipelineBuilder;
-  /** Terminate the pipeline: wire source → filters → mapper → actor, return wrapped actor. */
-  actor(typeOrInstanceOrProps?: VtkClass | Record<string, any>, props?: Record<string, any>): Wrapped;
+/** A reusable pipeline template. Callable with a source to produce wired output. */
+interface PipeTemplate {
+  /** Append a filter stage to the template (classes only, not instances). */
+  pipe(type: VtkClass, props?: Record<string, any>): PipeTemplate;
+  /** Set the mapper for the template (classes only). */
+  mapper(type?: VtkClass, props?: Record<string, any>): PipeTemplate;
+  /** Set the actor for the template — makes the template terminal. */
+  actor(typeOrProps?: VtkClass | Record<string, any>, props?: Record<string, any>): PipeTemplate;
+  /** Apply the template to a source — creates fresh instances and wires via .pipe(). */
+  (source: VtkClass | VtkObject | Wrapped | any, props?: Record<string, any>): Wrapped;
 }
 
 /**
- * Create a fluent pipeline builder.
+ * Create a deferred pipeline template. Only accepts classes (not instances).
  *
- *   ez.pipeline(vtkConeSource, { height: 1.5 }).actor()
- *   ez.pipeline(vtkConeSource).filter(vtkNormals).actor()
- *   ez.pipeline(polyData).actor({ property: { color: [1, 0, 0] } })
+ *   const enhance = ez.pipe(vtkNormals).pipe(vtkCellCenters);
+ *   enhance(cone)       // fresh instances, wired
+ *   enhance(cylinder)   // reusable
  */
-export function pipeline(
-  input: VtkClass | VtkObject | Wrapped | any,
-  props?: Record<string, any>,
-): PipelineBuilder;
+export function pipe(type: VtkClass, props?: Record<string, any>): PipeTemplate;
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -175,7 +192,7 @@ declare const ez: {
   unwrap: typeof unwrap;
   create: typeof create;
   createViewer: typeof createViewer;
-  pipeline: typeof pipeline;
+  pipe: typeof pipe;
   applyProps: typeof applyProps;
   wireChain: typeof wireChain;
   isVtkObject: typeof isVtkObject;

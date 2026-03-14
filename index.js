@@ -7,7 +7,7 @@
 // Usage:
 //   import ez from 'vtk-easy';
 //   const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] });
-//   const actor = ez.pipeline(vtkConeSource, { height: 1.5 }).actor();
+//   const actor = ez.create(vtkConeSource, { height: 1.5 }).actor();
 //   view.add(actor);
 //   view.renderer.resetCamera();
 //   view.renderWindow.render();
@@ -43,6 +43,7 @@ function defaults(config) {
 
 const WRAP_TAG = Symbol('vtkEasyWrap');
 const RAW_TAG = Symbol('vtkEasyRaw');
+const MAPPER_TAG = Symbol('vtkEasyMapper');
 
 function wrap(instance) {
   if (!instance) return instance;
@@ -73,10 +74,13 @@ function wrap(instance) {
         return direct;
       }
 
+      // Synthetics — only inject if no getXxx() exists for this name,
+      // otherwise property-style access (e.g. actor.mapper → getMapper())
+      // would be shadowed.
+      const cap = capitalize(prop);
+      const hasGetter = typeof target[`get${cap}`] === 'function';
+
       // synthetic pipe() — wire this object's output into a downstream stage
-      //   source.pipe(vtkFilterClass, props?)  → creates, wires, returns wrapped
-      //   source.pipe(existingInstance)         → wires, returns wrapped
-      //   data.pipe(vtkFilterClass)             → uses setInputData
       if (prop === 'pipe') {
         return (typeOrInstance, props) => {
           const downstream = resolveArg(typeOrInstance, props);
@@ -86,6 +90,49 @@ function wrap(instance) {
             downstream.setInputData(target);
           }
           return wrap(downstream);
+        };
+      }
+
+      // synthetic mapper() — shorthand for .pipe(defaultMapper), tags result
+      if (prop === 'mapper' && !hasGetter) {
+        return (typeOrInstance, props) => {
+          const type = typeOrInstance || _defaults.Mapper;
+          const result = receiver.pipe(type, props);
+          unwrap(result)[MAPPER_TAG] = true;
+          return result;
+        };
+      }
+
+      // synthetic actor() — terminal: creates mapper (if needed) + actor
+      if (prop === 'actor' && !hasGetter) {
+        return (typeOrInstanceOrProps, props) => {
+          // If current object was created by .mapper(), use it directly.
+          // Otherwise auto-create a default mapper.
+          const mapperRaw = target[MAPPER_TAG] ? target : unwrap(receiver.mapper());
+
+          let actorInstance;
+          let actorProps;
+
+          if (!typeOrInstanceOrProps) {
+            actorInstance = _defaults.Actor.newInstance();
+            actorProps = null;
+          } else if (isVtkClass(typeOrInstanceOrProps)) {
+            actorInstance = typeOrInstanceOrProps.newInstance(stripReserved(props || {}));
+            actorProps = props;
+          } else {
+            // plain config object like { property: { color: [1,0,0] } }
+            actorInstance = _defaults.Actor.newInstance();
+            actorProps = typeOrInstanceOrProps;
+          }
+
+          actorInstance.setMapper(mapperRaw);
+
+          const propConfig = actorProps && actorProps.property;
+          if (propConfig && typeof propConfig === 'object') {
+            applyProps(actorInstance.getProperty(), propConfig);
+          }
+
+          return wrap(actorInstance);
         };
       }
 
@@ -99,7 +146,6 @@ function wrap(instance) {
       }
 
       // try the getXxx() convention
-      const cap = capitalize(prop);
       const getter = target[`get${cap}`];
       if (typeof getter === 'function') {
         const val = getter.call(target);
@@ -137,118 +183,6 @@ function unwrap(obj) {
 
 function create(Type, props = {}) {
   return wrap(Type.newInstance(props));
-}
-
-// ---------------------------------------------------------------------------
-// pipeline — fluent pipeline builder
-// ---------------------------------------------------------------------------
-//
-// From a class:
-//   ez.pipeline(vtkConeSource).actor()
-//   ez.pipeline(vtkConeSource, { height: 1.5 }).actor()
-//
-// From an existing instance or wrapped proxy:
-//   const cone = ez.create(vtkConeSource);
-//   ez.pipeline(cone).actor()
-//
-// From raw data:
-//   ez.pipeline(polyData).actor()
-//
-// With filters:
-//   ez.pipeline(vtkPlaneSource).filter(calculator).filter(vtkWarpScalar).actor()
-//
-// Non-default mapper/actor:
-//   ez.pipeline(vtkRTAnalyticSource)
-//     .mapper(vtkImageMapper, { sliceAtFocalPoint: true })
-//     .actor(vtkImageSlice, { property: { colorWindow: 255 } })
-//
-// Add to view:
-//   view.add(
-//     ez.pipeline(vtkConeSource).actor(),
-//     ez.pipeline(vtkConeSource, { center: [2, 0, 0] }).actor({ property: { color: [1, 0, 0] } }),
-//   );
-
-class PipelineBuilder {
-  constructor(input) {
-    this._input = input;  // raw vtk instance or data object
-    this._filters = [];
-    this._mapperConfig = null;
-  }
-
-  filter(typeOrInstance, props) {
-    this._filters.push({ typeOrInstance, props });
-    return this;
-  }
-
-  mapper(typeOrInstance, props) {
-    this._mapperConfig = { typeOrInstance, props };
-    return this;
-  }
-
-  actor(typeOrInstanceOrProps, props) {
-    // actor()                        — default type, no props
-    // actor({ property: {...} })     — default type, with props
-    // actor(vtkImageSlice)           — explicit type, no props
-    // actor(vtkImageSlice, { ... })  — explicit type, with props
-    let actorInstance;
-    let actorProps;
-
-    if (!typeOrInstanceOrProps) {
-      actorInstance = _defaults.Actor.newInstance();
-      actorProps = null;
-    } else if (isVtkObject(typeOrInstanceOrProps)) {
-      actorInstance = typeOrInstanceOrProps;
-      actorProps = null;
-    } else if (isVtkClass(typeOrInstanceOrProps)) {
-      actorInstance = typeOrInstanceOrProps.newInstance(stripReserved(props || {}));
-      actorProps = props;
-    } else {
-      // plain config object like { property: { color: [1,0,0] } }
-      actorInstance = _defaults.Actor.newInstance();
-      actorProps = typeOrInstanceOrProps;
-    }
-
-    // Resolve mapper
-    const mapperCfg = this._mapperConfig;
-    const mapper = mapperCfg
-      ? resolveArg(mapperCfg.typeOrInstance, mapperCfg.props)
-      : _defaults.Mapper.newInstance();
-
-    // Wire: input → filters → mapper using pipe()
-    let current = wrap(this._input);
-    for (const { typeOrInstance: ft, props: fp } of this._filters) {
-      current = current.pipe(ft, fp);
-    }
-    current.pipe(mapper);
-
-    // Actor ← mapper
-    actorInstance.setMapper(mapper);
-
-    // Actor properties
-    const propConfig = actorProps && actorProps.property;
-    if (propConfig && typeof propConfig === 'object') {
-      applyProps(actorInstance.getProperty(), propConfig);
-    }
-
-    // Return wrapped actor
-    return wrap(actorInstance);
-  }
-}
-
-function pipeline(input, props) {
-  // Detect what we got:
-  //   vtk class (has newInstance)  → create instance
-  //   vtk instance or wrapped     → unwrap
-  //   anything else               → raw data
-  // pipe() handles algorithm-vs-data detection automatically.
-  if (isVtkClass(input)) {
-    return new PipelineBuilder(input.newInstance(props || {}));
-  }
-  const raw = unwrap(input);
-  if (isVtkObject(raw)) {
-    return new PipelineBuilder(raw);
-  }
-  return new PipelineBuilder(input);
 }
 
 // ---------------------------------------------------------------------------
@@ -442,8 +376,82 @@ function defineSource(spec) {
 }
 
 // ---------------------------------------------------------------------------
+// pipe — deferred pipeline template
+// ---------------------------------------------------------------------------
+//
+//   const enhance = ez.pipe(vtkNormals).pipe(vtkCellCenters);
+//   enhance(cone)       // fresh instances, wired via eager .pipe()
+//   enhance(cylinder)   // reusable
+//
+// Only accepts classes (not instances) — each call creates fresh instances.
+
+function pipe(type, props) {
+  if (!isVtkClass(type)) {
+    throw new Error('ez.pipe() accepts classes, not instances — use source.pipe(instance) for eager wiring');
+  }
+  const specs = [[type, props]];
+  let _mapperConfig = null;   // { type, props } or null
+  let _actorConfig = null;    // { type, props } or null
+
+  function requireClass(t) {
+    if (!isVtkClass(t)) {
+      throw new Error('ez.pipe() accepts classes, not instances — use source.pipe(instance) for eager wiring');
+    }
+  }
+
+  function apply(source, sourceProps) {
+    const raw = isVtkClass(source) ? source.newInstance(sourceProps || {}) : unwrap(source);
+    let current = wrap(raw);
+    for (const [t, p] of specs) {
+      current = current.pipe(t, p);
+    }
+
+    // If .mapper() was called on the template, wire mapper
+    if (_mapperConfig || _actorConfig) {
+      current = current.mapper(
+        _mapperConfig ? _mapperConfig.type : undefined,
+        _mapperConfig ? _mapperConfig.props : undefined,
+      );
+    }
+
+    // If .actor() was called on the template, wire actor
+    if (_actorConfig) {
+      current = current.actor(
+        _actorConfig.type || _actorConfig.props,
+        _actorConfig.type ? _actorConfig.props : undefined,
+      );
+    }
+
+    return current;
+  }
+
+  apply.pipe = (type, props) => {
+    requireClass(type);
+    specs.push([type, props]);
+    return apply;
+  };
+
+  apply.mapper = (type, props) => {
+    if (type) requireClass(type);
+    _mapperConfig = { type: type || null, props: props || null };
+    return apply;
+  };
+
+  apply.actor = (typeOrProps, props) => {
+    if (typeOrProps && isVtkClass(typeOrProps)) {
+      _actorConfig = { type: typeOrProps, props: props || null };
+    } else {
+      _actorConfig = { type: null, props: typeOrProps || null };
+    }
+    return apply;
+  };
+
+  return apply;
+}
+
+// ---------------------------------------------------------------------------
 // exports
 // ---------------------------------------------------------------------------
 
-export { defaults, wrap, unwrap, create, pipeline, applyProps, wireChain, isVtkObject, defineFilter, defineSource, prop };
-export default { defaults, wrap, unwrap, create, pipeline, applyProps, wireChain, isVtkObject, defineFilter, defineSource, prop };
+export { defaults, wrap, unwrap, create, pipe, applyProps, wireChain, isVtkObject, defineFilter, defineSource, prop };
+export default { defaults, wrap, unwrap, create, pipe, applyProps, wireChain, isVtkObject, defineFilter, defineSource, prop };

@@ -24,7 +24,7 @@ ofun.addPoint(180, 0);
 ofun.addPoint(255, 0);
 
 // Pipeline — non-standard actor/mapper types
-const actor = ez.pipeline(vtkRTAnalyticSource, {
+const actor = ez.create(vtkRTAnalyticSource, {
     wholeExtent: [0, 200, 0, 200, 0, 200],
     center: [100, 100, 100],
     standardDeviation: 0.3,

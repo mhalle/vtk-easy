@@ -1,7 +1,7 @@
 // Tests for vtk-easy
 // Run: node index.test.js
 
-import { defaults, wrap, unwrap, create, pipeline, wireChain, applyProps, isVtkObject } from './index.js';
+import { defaults, wrap, unwrap, create, wireChain, applyProps, isVtkObject } from './index.js';
 
 let passed = 0;
 let failed = 0;
@@ -24,8 +24,6 @@ function mockVtkObject(className, defaults = {}) {
     getOutputPort: () => { const fn = () => model; fn.filter = api; return fn; },
     setInputConnection: (port, portIdx = 0) => { model[`_input${portIdx}`] = port; },
     setInputData: (data, port = 0) => { model[`_data${port}`] = data; },
-    setMapper: (m) => { model._mapper = m; },
-    getMapper: () => model._mapper,
     getProperty: () => mockVtkObject('vtkProperty'),
     set: (map) => { Object.assign(model, map); },
     get: (...names) => {
@@ -50,6 +48,18 @@ function mockVtkObject(className, defaults = {}) {
 function mockVtkClass(className, defaults = {}) {
   return {
     newInstance: (initialValues = {}) => mockVtkObject(className, { ...defaults, ...initialValues }),
+  };
+}
+
+// Actor-like mock: has setMapper/getMapper/getProperty (like real vtkActor)
+function mockActorClass(className = 'vtkActor', defaults = {}) {
+  return {
+    newInstance: (initialValues = {}) => {
+      const obj = mockVtkObject(className, { ...defaults, ...initialValues });
+      obj.setMapper = (m) => { obj._model._mapper = m; };
+      obj.getMapper = () => obj._model._mapper;
+      return obj;
+    },
   };
 }
 
@@ -143,176 +153,8 @@ console.log('--- applyProps ---');
 }
 
 // ---------------------------------------------------------------------------
-// Tests: pipeline() — fluent builder
+// Tests: synthetic .mapper(), .actor() on wrapped objects
 // ---------------------------------------------------------------------------
-
-console.log('--- pipeline: from class ---');
-{
-  const MockSource = mockVtkClass('vtkSource', { height: 1.0 });
-  const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockActor = mockVtkClass('vtkActor', {});
-  defaults({ Mapper: MockMapper, Actor: MockActor });
-
-  const actor = pipeline(MockSource, { height: 5.0 }).actor();
-  assert(isVtkObject(unwrap(actor)), 'returns a vtk actor');
-  assert(unwrap(actor).isA('vtkActor'), 'actor has correct type');
-  assert(unwrap(actor)._model._mapper !== undefined, 'actor has mapper');
-
-  defaults({ Mapper: null, Actor: null });
-}
-
-console.log('--- pipeline: from class, no props ---');
-{
-  const MockSource = mockVtkClass('vtkSource', {});
-  const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockActor = mockVtkClass('vtkActor', {});
-  defaults({ Mapper: MockMapper, Actor: MockActor });
-
-  const actor = pipeline(MockSource).actor();
-  assert(unwrap(actor).isA('vtkActor'), 'actor created from class with no props');
-
-  defaults({ Mapper: null, Actor: null });
-}
-
-console.log('--- pipeline: from existing instance ---');
-{
-  const existing = mockVtkObject('vtkFilter', {});
-  const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockActor = mockVtkClass('vtkActor', {});
-  defaults({ Mapper: MockMapper, Actor: MockActor });
-
-  const actor = pipeline(existing).actor();
-  assert(unwrap(actor).isA('vtkActor'), 'works with existing instance');
-  assert(unwrap(actor)._model._mapper._model._input0 !== undefined, 'mapper wired to instance');
-
-  defaults({ Mapper: null, Actor: null });
-}
-
-console.log('--- pipeline: from wrapped proxy ---');
-{
-  const raw = mockVtkObject('vtkSource', { height: 1.0 });
-  const wrapped = wrap(raw);
-  const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockActor = mockVtkClass('vtkActor', {});
-  defaults({ Mapper: MockMapper, Actor: MockActor });
-
-  const actor = pipeline(wrapped).actor();
-  assert(unwrap(actor).isA('vtkActor'), 'works with wrapped proxy');
-
-  defaults({ Mapper: null, Actor: null });
-}
-
-console.log('--- pipeline: from raw data ---');
-{
-  const fakeData = { fake: 'polydata' };
-  const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockActor = mockVtkClass('vtkActor', {});
-  defaults({ Mapper: MockMapper, Actor: MockActor });
-
-  const actor = pipeline(fakeData).actor();
-  assert(unwrap(actor).isA('vtkActor'), 'data pipeline creates actor');
-  assert(unwrap(actor)._model._mapper._model._data0 === fakeData, 'data set on mapper');
-
-  defaults({ Mapper: null, Actor: null });
-}
-
-console.log('--- pipeline: with explicit mapper ---');
-{
-  const MockSource = mockVtkClass('vtkSource', {});
-  const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockActor = mockVtkClass('vtkActor', {});
-  defaults({ Actor: MockActor });
-
-  const actor = pipeline(MockSource).mapper(MockMapper).actor();
-  assert(unwrap(actor).isA('vtkActor'), 'actor created');
-  assert(unwrap(actor)._model._mapper !== undefined, 'actor has mapper');
-
-  defaults({ Actor: null });
-}
-
-console.log('--- pipeline: with filter ---');
-{
-  const MockSource = mockVtkClass('vtkSource', {});
-  const MockFilter = mockVtkClass('vtkFilter', {});
-  const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockActor = mockVtkClass('vtkActor', {});
-  defaults({ Mapper: MockMapper, Actor: MockActor });
-
-  const actor = pipeline(MockSource).filter(MockFilter).actor();
-  assert(unwrap(actor).isA('vtkActor'), 'actor created with filter');
-
-  defaults({ Mapper: null, Actor: null });
-}
-
-console.log('--- pipeline: with multiple filters ---');
-{
-  const MockSource = mockVtkClass('vtkSource', {});
-  const MockFilter1 = mockVtkClass('vtkFilter1', {});
-  const MockFilter2 = mockVtkClass('vtkFilter2', {});
-  const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockActor = mockVtkClass('vtkActor', {});
-  defaults({ Mapper: MockMapper, Actor: MockActor });
-
-  const actor = pipeline(MockSource).filter(MockFilter1).filter(MockFilter2).actor();
-  assert(unwrap(actor).isA('vtkActor'), 'actor created with two filters');
-
-  defaults({ Mapper: null, Actor: null });
-}
-
-console.log('--- pipeline: non-default actor type ---');
-{
-  const MockSource = mockVtkClass('vtkSource', {});
-  const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockSlice = mockVtkClass('vtkImageSlice', {});
-  defaults({ Mapper: MockMapper });
-
-  const actor = pipeline(MockSource).actor(MockSlice);
-  assert(unwrap(actor).isA('vtkImageSlice'), 'non-default actor type used');
-
-  defaults({ Mapper: null });
-}
-
-console.log('--- pipeline: actor with property config ---');
-{
-  const MockSource = mockVtkClass('vtkSource', {});
-  const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockActor = mockVtkClass('vtkActor', {});
-  defaults({ Mapper: MockMapper, Actor: MockActor });
-
-  const actor = pipeline(MockSource).actor({ property: { color: [1, 0, 0] } });
-  assert(unwrap(actor).isA('vtkActor'), 'actor with property config created');
-
-  defaults({ Mapper: null, Actor: null });
-}
-
-console.log('--- pipeline: branching (same source, two actors) ---');
-{
-  const src = mockVtkObject('vtkSource', {});
-  const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockActor = mockVtkClass('vtkActor', {});
-  defaults({ Mapper: MockMapper, Actor: MockActor });
-
-  const a1 = pipeline(src).actor();
-  const a2 = pipeline(src).actor();
-  assert(unwrap(a1) !== unwrap(a2), 'two different actors');
-  assert(unwrap(a1)._model._mapper !== unwrap(a2)._model._mapper, 'two different mappers');
-
-  defaults({ Mapper: null, Actor: null });
-}
-
-console.log('--- pipeline: data with filter ---');
-{
-  const fakeData = { fake: 'polydata' };
-  const MockFilter = mockVtkClass('vtkFilter', {});
-  const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockActor = mockVtkClass('vtkActor', {});
-  defaults({ Mapper: MockMapper, Actor: MockActor });
-
-  const actor = pipeline(fakeData).filter(MockFilter).actor();
-  assert(unwrap(actor).isA('vtkActor'), 'data + filter pipeline creates actor');
-
-  defaults({ Mapper: null, Actor: null });
-}
 
 // ---------------------------------------------------------------------------
 // Tests: pipe()
@@ -380,6 +222,305 @@ console.log('--- pipe: from plain data ---');
   const MockFilter = mockVtkClass('vtkFilter', {});
   const result = wrap(fakeData).pipe(MockFilter);
   assert(unwrap(result)._model._data0 === fakeData, 'pipe from plain data uses setInputData');
+}
+
+// ---------------------------------------------------------------------------
+// Tests: ez.pipe() — deferred pipeline templates
+// ---------------------------------------------------------------------------
+
+console.log('--- ez.pipe: basic template ---');
+{
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const template = pipe(MockFilter).pipe(MockMapper);
+  assert(typeof template === 'function', 'pipe returns a callable');
+  assert(typeof template.pipe === 'function', 'pipe result has .pipe()');
+
+  const src = mockVtkObject('vtkSource', {});
+  const result = template(src);
+  assert(unwrap(result).isA('vtkMapper'), 'template produces final stage');
+  assert(unwrap(result)._model._input0 !== undefined, 'final stage is wired');
+}
+
+console.log('--- ez.pipe: fresh instances per call ---');
+{
+  const MockFilter = mockVtkClass('vtkFilter', { value: 0 });
+  const template = pipe(MockFilter);
+
+  const src1 = mockVtkObject('vtkSource1', {});
+  const src2 = mockVtkObject('vtkSource2', {});
+  const r1 = template(src1);
+  const r2 = template(src2);
+  assert(unwrap(r1) !== unwrap(r2), 'each call creates a fresh instance');
+}
+
+console.log('--- ez.pipe: props passed through ---');
+{
+  const MockFilter = mockVtkClass('vtkFilter', { factor: 1.0 });
+  const template = pipe(MockFilter, { factor: 5.0 });
+
+  const src = mockVtkObject('vtkSource', {});
+  const result = template(src);
+  assert(unwrap(result).getFactor() === 5.0, 'props applied to fresh instance');
+}
+
+console.log('--- ez.pipe: works with data source ---');
+{
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const template = pipe(MockFilter);
+
+  const data = mockVtkObject('vtkPolyData', {});
+  delete data.getOutputPort;
+  const result = template(data);
+  assert(unwrap(result)._model._data0 === data, 'template uses setInputData for data objects');
+}
+
+console.log('--- ez.pipe: accepts class + props as source ---');
+{
+  const MockSource = mockVtkClass('vtkSource', { height: 1.0 });
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const template = pipe(MockFilter);
+
+  const result = template(MockSource, { height: 5.0 });
+  assert(unwrap(result).isA('vtkFilter'), 'template applied to class produces filter');
+  assert(unwrap(result)._model._input0 !== undefined, 'filter is wired');
+}
+
+console.log('--- ez.pipe: rejects instances ---');
+{
+  const instance = mockVtkObject('vtkFilter', {});
+  let threw = false;
+  try { pipe(instance); } catch (e) { threw = true; }
+  assert(threw, 'ez.pipe() throws on instance');
+}
+
+console.log('--- ez.pipe: .pipe() rejects instances ---');
+{
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const instance = mockVtkObject('vtkFilter', {});
+  let threw = false;
+  try { pipe(MockFilter).pipe(instance); } catch (e) { threw = true; }
+  assert(threw, 'template.pipe() throws on instance');
+}
+
+console.log('--- ez.pipe: .mapper() on template ---');
+{
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  defaults({ Mapper: MockMapper });
+
+  const template = pipe(MockFilter).mapper();
+  const src = mockVtkObject('vtkSource', {});
+  const result = template(src);
+  assert(unwrap(result).isA('vtkMapper'), 'template.mapper() creates mapper');
+  assert(unwrap(result)._model._input0 !== undefined, 'mapper wired');
+
+  defaults({ Mapper: null });
+}
+
+console.log('--- ez.pipe: .mapper() with explicit type ---');
+{
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const MockImageMapper = mockVtkClass('vtkImageMapper', { slicing: 0 });
+  const template = pipe(MockFilter).mapper(MockImageMapper, { slicing: 3 });
+  const src = mockVtkObject('vtkSource', {});
+  const result = template(src);
+  assert(unwrap(result).isA('vtkImageMapper'), 'template uses explicit mapper type');
+  assert(unwrap(result).getSlicing() === 3, 'mapper props passed');
+}
+
+console.log('--- ez.pipe: .actor() on template ---');
+{
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const MockActor = mockActorClass();
+  defaults({ Mapper: MockMapper, Actor: MockActor });
+
+  const template = pipe(MockFilter).actor();
+  const src = mockVtkObject('vtkSource', {});
+  const result = template(src);
+  assert(unwrap(result).isA('vtkActor'), 'template.actor() creates actor');
+  assert(unwrap(result)._model._mapper !== undefined, 'actor has mapper');
+
+  defaults({ Mapper: null, Actor: null });
+}
+
+console.log('--- ez.pipe: .actor() with props ---');
+{
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const MockActor = mockActorClass();
+  defaults({ Mapper: MockMapper, Actor: MockActor });
+
+  const template = pipe(MockFilter).actor({ property: { color: [1, 0, 0] } });
+  const src = mockVtkObject('vtkSource', {});
+  const result = template(src);
+  assert(unwrap(result).isA('vtkActor'), 'template.actor() with props');
+
+  defaults({ Mapper: null, Actor: null });
+}
+
+console.log('--- ez.pipe: .mapper().actor() on template ---');
+{
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const MockImageMapper = mockVtkClass('vtkImageMapper', {});
+  const MockActor = mockActorClass();
+  defaults({ Actor: MockActor });
+
+  const template = pipe(MockFilter).mapper(MockImageMapper).actor();
+  const src = mockVtkObject('vtkSource', {});
+  const result = template(src);
+  assert(unwrap(result).isA('vtkActor'), 'template mapper+actor creates actor');
+  assert(unwrap(result)._model._mapper.isA('vtkImageMapper'), 'uses explicit mapper');
+
+  defaults({ Actor: null });
+}
+
+console.log('--- ez.pipe: .actor() fresh instances per call ---');
+{
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const MockActor = mockActorClass();
+  defaults({ Mapper: MockMapper, Actor: MockActor });
+
+  const template = pipe(MockFilter).actor();
+  const src1 = mockVtkObject('vtkSource1', {});
+  const src2 = mockVtkObject('vtkSource2', {});
+  const r1 = template(src1);
+  const r2 = template(src2);
+  assert(unwrap(r1) !== unwrap(r2), 'template.actor() creates fresh actors');
+  assert(unwrap(r1)._model._mapper !== unwrap(r2)._model._mapper, 'fresh mappers too');
+
+  defaults({ Mapper: null, Actor: null });
+}
+
+// ---------------------------------------------------------------------------
+// Tests: synthetic .filter(), .mapper(), .actor() on wrapped objects
+// ---------------------------------------------------------------------------
+
+console.log('--- synthetic mapper: creates default mapper ---');
+{
+  const MockMapper = mockVtkClass('vtkMapper', { mode: 'default' });
+  defaults({ Mapper: MockMapper });
+
+  const src = mockVtkObject('vtkSource', {});
+  const result = wrap(src).mapper();
+  assert(unwrap(result).isA('vtkMapper'), 'mapper creates default mapper');
+  assert(unwrap(result)._model._input0 !== undefined, 'mapper wires input');
+
+  defaults({ Mapper: null });
+}
+
+console.log('--- synthetic mapper: explicit type ---');
+{
+  const MockImageMapper = mockVtkClass('vtkImageMapper', { slicing: 0 });
+  const src = mockVtkObject('vtkSource', {});
+  const result = wrap(src).mapper(MockImageMapper, { slicing: 2 });
+  assert(unwrap(result).isA('vtkImageMapper'), 'mapper uses explicit type');
+  assert(unwrap(result).getSlicing() === 2, 'mapper passes props');
+}
+
+console.log('--- synthetic actor: full chain source.mapper().actor() ---');
+{
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const MockActor = mockActorClass();
+  defaults({ Mapper: MockMapper, Actor: MockActor });
+
+  const src = mockVtkObject('vtkSource', {});
+  const actor = wrap(src).mapper().actor();
+  assert(unwrap(actor).isA('vtkActor'), 'actor created');
+  assert(unwrap(actor)._model._mapper !== undefined, 'actor has mapper');
+  assert(unwrap(actor)._model._mapper.isA('vtkMapper'), 'mapper is correct type');
+
+  defaults({ Mapper: null, Actor: null });
+}
+
+console.log('--- synthetic actor: auto-creates mapper ---');
+{
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const MockActor = mockActorClass();
+  defaults({ Mapper: MockMapper, Actor: MockActor });
+
+  const src = mockVtkObject('vtkSource', {});
+  const actor = wrap(src).actor();
+  assert(unwrap(actor).isA('vtkActor'), 'actor auto-creates mapper');
+  assert(unwrap(actor)._model._mapper !== undefined, 'auto-mapper attached');
+
+  defaults({ Mapper: null, Actor: null });
+}
+
+console.log('--- synthetic actor: with property config ---');
+{
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const MockActor = mockActorClass();
+  defaults({ Mapper: MockMapper, Actor: MockActor });
+
+  const src = mockVtkObject('vtkSource', {});
+  const actor = wrap(src).actor({ property: { color: [1, 0, 0] } });
+  assert(unwrap(actor).isA('vtkActor'), 'actor with props created');
+
+  defaults({ Mapper: null, Actor: null });
+}
+
+console.log('--- synthetic actor: explicit actor type ---');
+{
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const MockSlice = mockActorClass('vtkImageSlice');
+  defaults({ Mapper: MockMapper });
+
+  const src = mockVtkObject('vtkSource', {});
+  const actor = wrap(src).actor(MockSlice);
+  assert(unwrap(actor).isA('vtkImageSlice'), 'explicit actor type used');
+
+  defaults({ Mapper: null });
+}
+
+console.log('--- synthetic: full chain source.pipe().pipe().mapper().actor() ---');
+{
+  const MockFilter1 = mockVtkClass('vtkFilter1', {});
+  const MockFilter2 = mockVtkClass('vtkFilter2', {});
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const MockActor = mockActorClass();
+  defaults({ Mapper: MockMapper, Actor: MockActor });
+
+  const src = mockVtkObject('vtkSource', {});
+  const actor = wrap(src).pipe(MockFilter1).pipe(MockFilter2).mapper().actor();
+  assert(unwrap(actor).isA('vtkActor'), 'full chain creates actor');
+  assert(unwrap(actor)._model._mapper.isA('vtkMapper'), 'mapper in chain');
+
+  defaults({ Mapper: null, Actor: null });
+}
+
+console.log('--- synthetic: source.pipe().actor() auto-mapper ---');
+{
+  const MockFilter = mockVtkClass('vtkFilter', {});
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const MockActor = mockActorClass();
+  defaults({ Mapper: MockMapper, Actor: MockActor });
+
+  const src = mockVtkObject('vtkSource', {});
+  const actor = wrap(src).pipe(MockFilter).actor();
+  assert(unwrap(actor).isA('vtkActor'), 'pipe.actor() auto-creates mapper');
+  assert(unwrap(actor)._model._mapper !== undefined, 'auto-mapper present');
+
+  defaults({ Mapper: null, Actor: null });
+}
+
+console.log('--- synthetic: no clash with getMapper/getActor ---');
+{
+  const MockMapper = mockVtkClass('vtkMapper', {});
+  const MockActor = mockActorClass();
+  defaults({ Mapper: MockMapper, Actor: MockActor });
+
+  const src = mockVtkObject('vtkSource', {});
+  const actor = wrap(src).actor();
+
+  // actor.mapper should call getMapper(), not return the synthetic function
+  const m = actor.mapper;
+  assert(isVtkObject(m), 'actor.mapper returns getMapper() result, not synthetic');
+  assert(typeof m !== 'function', 'actor.mapper is not a function');
+
+  defaults({ Mapper: null, Actor: null });
 }
 
 console.log('--- view.add ---');
@@ -456,7 +597,7 @@ console.log('--- proxy property access for getOutputPort ---');
 // defineFilter / defineSource (uses real vtk.js macros)
 // ---------------------------------------------------------------------------
 
-import { defineFilter, defineSource, prop } from './index.js';
+import { defineFilter, defineSource, prop, pipe } from './index.js';
 import { polyData } from './polydata.js';
 
 console.log('--- defineFilter: basic ---');
@@ -838,15 +979,15 @@ console.log('--- polyData: return value is wrapped ---');
   assert(pd.isA('vtkPolyData'), 'isA vtkPolyData');
 }
 
-console.log('--- polyData: pipeline integration ---');
+console.log('--- polyData: actor integration ---');
 {
   const MockMapper = mockVtkClass('vtkMapper', {});
-  const MockActor = mockVtkClass('vtkActor', {});
+  const MockActor = mockActorClass();
   defaults({ Mapper: MockMapper, Actor: MockActor });
 
   const pd = polyData({ points: [0,0,0, 1,0,0, 1,1,0], polys: [0,1,2] });
-  const actor = pipeline(pd).actor();
-  assert(unwrap(actor).isA('vtkActor'), 'pipeline from polyData creates actor');
+  const actor = pd.actor();
+  assert(unwrap(actor).isA('vtkActor'), 'polyData.actor() creates actor');
   assert(unwrap(actor)._model._mapper !== undefined, 'actor has mapper');
 
   defaults({ Mapper: null, Actor: null });

@@ -42,7 +42,8 @@ const warpScalar = ez.create(vtkWarpScalar);
 warpScalar.setInputArrayToProcess(0, 'z', 'PointData', 'Scalars');
 
 // Pipeline 1: flat plane colored by z
-const planeActor = ez.pipeline(simpleFilter)
+const wrappedFilter = ez.wrap(simpleFilter);
+const planeActor = wrappedFilter
   .mapper(vtkMapper, {
     interpolateScalarsBeforeMapping: true,
     useLookupTableScalarRange: true,
@@ -53,8 +54,8 @@ const planeActor = ez.pipeline(simpleFilter)
   .actor({ property: { edgeVisibility: true } });
 
 // Pipeline 2: warped surface — branches from same calculator
-const warpActor = ez.pipeline(simpleFilter)
-  .filter(warpScalar)
+const warpActor = wrappedFilter
+  .pipe(warpScalar)
   .mapper(vtkMapper, {
     interpolateScalarsBeforeMapping: true,
     useLookupTableScalarRange: true,

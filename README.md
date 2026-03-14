@@ -43,11 +43,8 @@ renderWindow.render();
 const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] });
 const pointSource = ez.create(vtkPointSource, { numberOfPoints: 25, radius: 0.25 });
 
-const pointsActor = ez.pipeline(pointSource)
-  .actor({ property: { pointSize: 5 } });
-const outlineActor = ez.pipeline(pointSource)
-  .filter(vtkOutlineFilter)
-  .actor({ property: { lineWidth: 5 } });
+const pointsActor = pointSource.actor({ property: { pointSize: 5 } });
+const outlineActor = pointSource.pipe(vtkOutlineFilter).actor({ property: { lineWidth: 5 } });
 view.add(pointsActor, outlineActor);
 
 view.renderer.resetCamera();
@@ -71,7 +68,7 @@ import ez from 'vtk-easy';
 const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] });
 const cone = ez.create(vtkConeSource, { height: 1.5 });
 
-const actor = ez.pipeline(cone).actor();
+const actor = cone.actor();
 view.add(actor);
 
 actor.property.color = [0.9, 0.2, 0.3];
@@ -84,7 +81,7 @@ view.renderWindow.render();
 
 ### `ez.defaults(config)`
 
-Override the built-in Mapper/Actor used by `pipeline().actor()`. By default vtk-easy uses `vtkMapper` and `vtkActor`, so most code never needs this.
+Override the built-in Mapper/Actor used by `.mapper()` and `.actor()`. By default vtk-easy uses `vtkMapper` and `vtkActor`, so most code never needs this.
 
 ```js
 ez.defaults({
@@ -117,7 +114,7 @@ actor.property.color = [1, 0, 0];  // getProperty() → setColor()
 
 // getXxx() results are available as properties too
 cone.outputPort          // calls getOutputPort()
-actor.mapper             // calls getMapper(), auto-wrapped
+actor.getMapper()        // calls getMapper(), auto-wrapped
 
 // all existing methods still pass through
 cone.getOutputPort();   // works
@@ -144,75 +141,133 @@ Or use `ez.unwrap()` to get the raw instance:
 materialsReader.applyMaterialToActor(name, ez.unwrap(actor));
 ```
 
-### `ez.pipeline(input, props?)`
+### `.pipe(typeOrInstance, props?)`
 
-Build a vtk.js pipeline with a fluent chain. Returns a `PipelineBuilder` — call `.actor()` to terminate.
-
-**From a class:**
+Every wrapped object has a `.pipe()` method that wires its output into a downstream stage. For algorithms (sources, filters), it uses `setInputConnection`; for data objects (like `vtkPolyData`), it uses `setInputData`. Returns the wrapped downstream object, so calls chain.
 
 ```js
-ez.pipeline(vtkConeSource).actor()
-ez.pipeline(vtkConeSource, { height: 1.5 }).actor()
+const cone = ez.create(vtkConeSource, { height: 1.5 });
+const normals = cone.pipe(vtkPolyDataNormals, { computeCellNormals: true });
+const mapper = normals.pipe(vtkMapper);
 ```
 
-**From an existing instance or wrapped proxy:**
+Accepts a vtk class (creates a new instance), an existing instance, or a wrapped proxy:
 
 ```js
-const cone = ez.create(vtkConeSource);
-ez.pipeline(cone).actor()
+source.pipe(vtkFilter)              // class → newInstance, wire, return wrapped
+source.pipe(vtkFilter, { k: v })    // class + props
+source.pipe(existingFilter)         // instance → wire, return wrapped
+source.pipe(wrappedFilter)          // unwrap, wire, return wrapped
 ```
 
-**From raw data:**
+Works with data objects too:
 
 ```js
-ez.pipeline(polyData).actor()
+import { polyData } from 'vtk-easy/polydata';
+const pd = polyData({ points: [...], polys: [...] });
+pd.pipe(vtkMapper)  // uses setInputData since polyData has no getOutputPort
 ```
 
-**With filters:**
+### `.mapper(type?, props?)`
+
+Shorthand for `.pipe(defaultMapper)` that tags the result so `.actor()` knows to use it directly. If no type is given, uses the default Mapper from `ez.defaults()`.
 
 ```js
-ez.pipeline(planeSource)
-  .filter(calculator)
-  .filter(vtkWarpScalar)
-  .actor()
+// Default mapper
+source.mapper().actor()
+
+// Explicit mapper type
+source.mapper(vtkImageMapper, { sliceAtFocalPoint: true }).actor(vtkImageSlice)
 ```
 
-**Non-default mapper/actor types:**
+### `.actor(typeOrProps?, props?)`
+
+Terminal method that creates a mapper (if needed) and an actor wired together.
 
 ```js
-ez.pipeline(vtkRTAnalyticSource, { wholeExtent: [0, 200, 0, 200, 0, 200] })
-  .mapper(vtkImageMapper, { sliceAtFocalPoint: true, slicingMode: SlicingMode.Z })
-  .actor(vtkImageSlice, { property: { colorWindow: 255, colorLevel: 127 } })
+// Simplest — default mapper + default actor
+cone.actor()
+
+// With actor properties
+cone.actor({ property: { color: [1, 0, 0], edgeVisibility: true } })
+
+// Non-default actor type
+source.mapper(vtkImageMapper, { slicingMode: SlicingMode.Z })
+      .actor(vtkImageSlice, { property: { colorWindow: 255, colorLevel: 127 } })
 ```
 
-**Actor properties:**
+If called after `.mapper()`, uses that mapper. Otherwise auto-creates a default mapper.
 
-```js
-ez.pipeline(cone).actor({ property: { color: [1, 0, 0], edgeVisibility: true } })
-```
-
-**Branching** — same source, two pipelines:
+**Branching** — same source, two actors:
 
 ```js
 const pointSource = ez.create(vtkPointSource, { numberOfPoints: 25 });
 
-const pointsActor = ez.pipeline(pointSource).actor({ property: { pointSize: 5 } });
-const outlineActor = ez.pipeline(pointSource).filter(vtkOutlineFilter).actor();
+const pointsActor = pointSource.actor({ property: { pointSize: 5 } });
+const outlineActor = pointSource.pipe(vtkOutlineFilter).actor();
 
 view.add(pointsActor, outlineActor);
+```
+
+**Full chain with filters:**
+
+```js
+const actor = source
+  .pipe(calculator)
+  .pipe(vtkWarpScalar)
+  .actor();
 ```
 
 **Multi-port** — wire manually after building:
 
 ```js
-const actor = ez.pipeline(planeSource)
-  .filter(calculator)
+const actor = planeSource
+  .pipe(calculator)
   .mapper(vtkGlyph3DMapper, { orientationArray: 'pressure' })
   .actor();
 
 // glyph source on port 1
-actor.mapper.setInputConnection(coneSource.outputPort, 1);
+actor.getMapper().setInputConnection(coneSource.outputPort, 1);
 ```
+
+### `ez.pipe(type, props?)` — deferred pipeline template
+
+The standalone `ez.pipe()` creates a reusable pipeline template. It looks like eager `.pipe()` chaining but defers execution — no instances are created until you apply it to a source.
+
+```js
+// Define a reusable template (classes only, not instances)
+const withNormals = ez.pipe(vtkPolyDataNormals);
+
+// Apply to different sources — fresh instances each time
+const coneNormals = withNormals(cone);
+const sphereNormals = withNormals(sphere);
+
+// Also accepts a class + props
+const result = withNormals(vtkConeSource, { height: 1.5 });
+```
+
+Templates chain just like eager `.pipe()`:
+
+```js
+const enhance = ez.pipe(vtkPolyDataNormals, { computeCellNormals: true })
+  .pipe(vtkCellCenters);
+
+enhance(cone)       // fresh normals + cellCenters, wired to cone
+enhance(cylinder)   // fresh normals + cellCenters, wired to cylinder
+```
+
+Templates can include `.mapper()` and `.actor()`:
+
+```js
+const withNormals = ez.pipe(vtkPolyDataNormals);
+
+const coneActor = withNormals(cone).actor({ property: { color: [1, 0.4, 0.2] } });
+const sphereActor = withNormals(sphere).actor({ property: { color: [0.2, 0.5, 1] } });
+
+view.add(coneActor, sphereActor);
+```
+
+Only classes are accepted — passing an instance throws, since instances would be shared across calls. Use eager `.pipe()` for instances.
 
 ### `view.add(...props)`
 
@@ -222,12 +277,12 @@ Any wrapped object with `getRenderer()` (FullScreenRenderWindow, GenericRenderWi
 view.add(actor1, actor2, volume);
 ```
 
-Or chain inline pipelines:
+Or chain inline:
 
 ```js
 const view = ez.create(vtkFullScreenRenderWindow, { background: [0, 0, 0] })
-  .add(ez.pipeline(cone1).actor())
-  .add(ez.pipeline(cone2).actor({ property: { color: [1, 0, 0] } }));
+  .add(cone1.actor())
+  .add(cone2.actor({ property: { color: [1, 0, 0] } }));
 ```
 
 Does one thing: calls `addViewProp` for each prop. No hidden resetCamera or render — those are explicit:
@@ -270,10 +325,8 @@ const vtkJitterFilter = ez.defineFilter({
   },
 });
 
-// Use in a pipeline like any vtk.js filter
-const actor = ez.pipeline(sphere)
-  .filter(vtkJitterFilter, { amplitude: 0.2 })
-  .actor();
+// Use in a pipeline
+const actor = sphere.pipe(vtkJitterFilter, { amplitude: 0.2 }).actor();
 ```
 
 **Simple source:**
@@ -357,7 +410,24 @@ f.reset();
 - **Thin veneer, not a framework.** The proxy adds minimal convenience methods (like `view.add()`) but never modifies vtk.js objects themselves.
 - **Everything is a real vtk.js object.** Wrapped objects are Proxies over the actual instances. Call any raw vtk.js method at any time.
 - **Explicit over magical.** You pass the vtk classes you use. No auto-import, no string-based lookups, no class registration. Camera reset and rendering are never hidden.
-- **Composable.** Branching pipelines, multi-port inputs, and mixed raw/wrapped code all work naturally.
+- **Composable.** Branching pipelines, multi-port inputs, reusable templates via `ez.pipe()`, and mixed raw/wrapped code all work naturally.
+
+## Corner cases
+
+**`.mapper` and `.actor` property access vs synthetic methods.** The synthetic `.mapper()` and `.actor()` methods are only injected when the wrapped object does *not* have a corresponding `getMapper()` or `getActor()` method. This means:
+
+- On a **source or filter** (no `getMapper`): `source.mapper()` calls the synthetic — creates and wires a mapper.
+- On an **actor** (has `getMapper`): `actor.mapper` is *not* the synthetic — it calls `getMapper()` and returns the existing mapper, just like any other property-style access.
+
+This is usually what you want. If you ever need to access a getter that shares a name with a synthetic, use the explicit `getXxx()` form:
+
+```js
+actor.getMapper()   // always works, even if .mapper() synthetic existed
+```
+
+**`.pipe()` is always available.** Unlike `.mapper()` and `.actor()`, the `.pipe()` synthetic is injected on all wrapped objects because no vtk.js class has `getPipe()`. On an actor this is harmless but meaningless — actors are terminal.
+
+**Deferred templates mutate in place.** Calling `.mapper()` or `.actor()` on a template returned by `ez.pipe()` modifies the template (builder pattern), just like `.pipe()` does. There is no way to "branch" a template — build separate templates if you need different terminations.
 
 ## License
 

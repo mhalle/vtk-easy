@@ -27,7 +27,7 @@ let pd = polyData({
   },
 });
 
-const actor = ez.pipeline(pd).actor();
+const actor = pd.actor();
 view.add(actor);
 view.renderer.resetCamera();
 view.renderWindow.render();

@@ -84,7 +84,7 @@ view.renderer.addLight(light);
 
 if (light.getPositional()) {
   // light source sphere
-  const sphereActor = ez.pipeline(vtkSphereSource, {
+  const sphereActor = ez.create(vtkSphereSource, {
     center: light.getPosition(),
     radius: 5.0,
   }).actor({
@@ -107,7 +107,7 @@ if (light.getPositional()) {
   vtkMath.add(frustumCenter, vtkMath.multiplyScalar(lightDir, frustumHeight * 0.5), halfDir);
   vtkMath.multiplyScalar(lightDir, -1, lightDir);
 
-  const coneActor = ez.pipeline(vtkConeSource, {
+  const coneActor = ez.create(vtkConeSource, {
     center: halfDir,
     radius: frustumRadius,
     height: frustumHeight,

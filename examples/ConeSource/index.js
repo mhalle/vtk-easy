@@ -11,8 +11,8 @@ const view = ez.create(vtkFullScreenRenderWindow);
 const cone1 = ez.create(vtkConeSource);
 const cone2 = ez.create(vtkConeSource);
 
-const actor1 = ez.pipeline(cone1).actor();
-const actor2 = ez.pipeline(cone2).actor();
+const actor1 = cone1.actor();
+const actor2 = cone2.actor();
 view.add(actor1, actor2);
 
 actor1.property.representation = 1;

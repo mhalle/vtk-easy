@@ -56,8 +56,8 @@ const sphere = ez.create(vtkSphereSource, {
 
 const jitter = vtkJitterFilter.newInstance({ amplitude: 0.05 });
 
-const actor = ez.pipeline(sphere)
-  .filter(jitter)
+const actor = sphere
+  .pipe(jitter)
   .actor({ property: { color: [0.4, 0.8, 0.5], edgeVisibility: true } });
 
 view.add(actor);

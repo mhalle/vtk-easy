@@ -67,8 +67,8 @@ tubeFilter.setInputArrayToProcess(0, 'Scalars', 'PointData', 'Scalars');
 
 // --- pipelines ---
 
-const rawActor = ez.pipeline(polyData).actor();
-const tubeActor = ez.pipeline(tubeFilter).actor();
+const rawActor = ez.wrap(polyData).actor();
+const tubeActor = tubeFilter.actor();
 view.add(rawActor, tubeActor);
 
 view.renderer.resetCamera();

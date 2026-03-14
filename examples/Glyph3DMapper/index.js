@@ -55,8 +55,8 @@ const planeSource = ez.create(vtkPlaneSource);
 const coneGlyph = ez.create(vtkConeSource, { resolution: 12 });
 
 // Pipeline: plane → calculator → glyph3D mapper
-const actor = ez.pipeline(planeSource)
-  .filter(calculator)
+const actor = planeSource
+  .pipe(calculator)
   .mapper(vtkGlyph3DMapper, {
     orientationArray: 'pressure',
     scalarRange: [0.0, 0.1],
